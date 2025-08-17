@@ -2,6 +2,7 @@
 package tui
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/charmbracelet/bubbles/textinput"
@@ -267,11 +268,37 @@ func (m *Model) getCardRenderHeight(c card.Card) int {
 	return contentHeight + borderHeight
 }
 
-func (m *Model) ensureFocusedCardIsVisible() {
-	if m.height == 0 {
-		return
+func (m *Model) getColumnHeaderHeight() int {
+	if m.width == 0 || len(m.board.Columns) == 0 || m.focusedColumn >= len(m.board.Columns) {
+		return 1
+	}
+	col := m.board.Columns[m.focusedColumn]
+	isHeaderFocused := m.currentFocusedCard() == 0
+
+	header := fmt.Sprintf("%s %d", col.Title, col.CardCount())
+
+	headerStyle := columnHeaderStyle
+	if isHeaderFocused {
+		headerStyle = focusedColumnHeaderStyle
 	}
 
+	colWidth := m.getFocusedColumnWidth()
+	if colWidth == 0 {
+		return 1
+	}
+
+	headerContentWidth := colWidth - columnStyle.GetHorizontalPadding() - headerStyle.GetHorizontalPadding()
+	if headerContentWidth < 0 {
+		headerContentWidth = 0
+	}
+	renderedHeader := headerStyle.Copy().Width(headerContentWidth).Render(header)
+	return lipgloss.Height(renderedHeader)
+}
+
+func (m *Model) ensureFocusedCardIsVisible() {
+	if m.height == 0 || len(m.board.Columns) == 0 || m.focusedColumn >= len(m.board.Columns) {
+		return
+	}
 	currentFocus := m.currentFocusedCard()
 	if currentFocus == 0 {
 		m.scrollOffset = 0
@@ -287,33 +314,52 @@ func (m *Model) ensureFocusedCardIsVisible() {
 
 	statusBar := renderStatusBar(m)
 	statusBarHeight := lipgloss.Height(statusBar)
-	headerHeight := 1 // An approximation of the column header height
+	headerHeight := m.getColumnHeaderHeight()
 	cardAreaH := m.height - statusBarHeight - headerHeight
+	if cardAreaH < 0 {
+		cardAreaH = 0
+	}
 	cards := m.board.Columns[m.focusedColumn].Cards
 
 	currentHeight := 0
 	lastVisibleIdx := -1
+	visibleCardsCount := 0
 
 	for i := m.scrollOffset; i < len(cards); i++ {
 		cardHeight := m.getCardRenderHeight(cards[i])
-		if currentHeight+cardHeight > cardAreaH {
+
+		heightToAdd := cardHeight
+		if visibleCardsCount > 0 {
+			heightToAdd++ // For the newline separator
+		}
+
+		if currentHeight+heightToAdd > cardAreaH {
 			break
 		}
 
-		currentHeight += cardHeight
+		currentHeight += heightToAdd
 		lastVisibleIdx = i
+		visibleCardsCount++
 	}
 
 	if focusedIdx > lastVisibleIdx {
 		newOffset := focusedIdx
 		visibleHeight := 0
+		visibleCardsCount := 0
 		for {
 			cardHeight := m.getCardRenderHeight(cards[newOffset])
-			if visibleHeight+cardHeight > cardAreaH {
+
+			heightToAdd := cardHeight
+			if visibleCardsCount > 0 {
+				heightToAdd++ // For the newline separator
+			}
+
+			if visibleHeight+heightToAdd > cardAreaH {
 				newOffset++
 				break
 			}
-			visibleHeight += cardHeight
+			visibleHeight += heightToAdd
+			visibleCardsCount++
 
 			if newOffset == 0 {
 				break
