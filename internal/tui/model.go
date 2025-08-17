@@ -4,6 +4,7 @@ package tui
 import (
 	"os"
 	"os/exec"
+	"sort"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/textinput"
@@ -245,6 +246,10 @@ func (m *Model) updateNormalMode(msg tea.Msg) tea.Cmd {
 
 	case "p":
 		if len(m.clipboard) > 0 {
+			sort.Slice(m.clipboard, func(i, j int) bool {
+				return m.clipboard[i].CreatedAt.After(m.clipboard[j].CreatedAt)
+			})
+
 			destCol := &m.board.Columns[m.focusedColumn]
 			if m.isCut {
 				clipboardUUIDs := make(map[string]struct{}, len(m.clipboard))
@@ -264,19 +269,72 @@ func (m *Model) updateNormalMode(msg tea.Msg) tea.Cmd {
 					}
 					col.Cards = keptCards
 				}
-				destCol.Cards = append(destCol.Cards, m.clipboard...)
+				destCol.Cards = append(m.clipboard, destCol.Cards...)
 			} else {
+				var newCards []card.Card
 				for _, c := range m.clipboard {
 					newCard, err := fs.CopyCard(c, *destCol)
 					if err == nil {
-						destCol.Cards = append(destCol.Cards, newCard)
+						newCards = append(newCards, newCard)
 					}
 				}
+				destCol.Cards = append(newCards, destCol.Cards...)
 			}
 
 			fs.WriteBoard(m.board)
 			m.clipboard = []card.Card{}
 			m.isCut = false
+		}
+
+	case "delete":
+		var cardsToDelete []card.Card
+		if len(m.selected) > 0 {
+			for _, col := range m.board.Columns {
+				for _, c := range col.Cards {
+					if _, isSelected := m.selected[c.UUID]; isSelected {
+						cardsToDelete = append(cardsToDelete, c)
+					}
+				}
+			}
+		} else if m.focusedCard > 0 {
+			cardIndex := m.focusedCard - 1
+			cardsToDelete = append(cardsToDelete, m.board.Columns[m.focusedColumn].Cards[cardIndex])
+		}
+
+		if len(cardsToDelete) == 0 {
+			return nil
+		}
+
+		trashedUUIDs := make(map[string]struct{})
+		for _, c := range cardsToDelete {
+			if err := fs.TrashCard(c); err == nil {
+				trashedUUIDs[c.UUID] = struct{}{}
+			}
+		}
+
+		if len(trashedUUIDs) > 0 {
+			for i := range m.board.Columns {
+				col := &m.board.Columns[i]
+				keptCards := col.Cards[:0]
+				for _, c := range col.Cards {
+					if _, wasTrashed := trashedUUIDs[c.UUID]; !wasTrashed {
+						keptCards = append(keptCards, c)
+					}
+				}
+				col.Cards = keptCards
+			}
+
+			keptClipboard := m.clipboard[:0]
+			for _, c := range m.clipboard {
+				if _, wasTrashed := trashedUUIDs[c.UUID]; !wasTrashed {
+					keptClipboard = append(keptClipboard, c)
+				}
+			}
+			m.clipboard = keptClipboard
+
+			m.selected = make(map[string]struct{})
+			fs.WriteBoard(m.board)
+			m.clampFocusedCard()
 		}
 	}
 	return nil
@@ -322,13 +380,14 @@ func (m *Model) executeCommand() tea.Cmd {
 			return nil
 		}
 
-		currentCol.Cards = append(currentCol.Cards, newCard)
+		currentCol.Cards = append([]card.Card{newCard}, currentCol.Cards...)
 
 		if err := fs.WriteBoard(m.board); err != nil {
 			return nil
 		}
 
-		m.focusedCard = len(currentCol.Cards)
+		m.focusedCard = 1
+		m.ensureFocusedCardIsVisible()
 	}
 
 	return nil

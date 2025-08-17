@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -204,6 +205,15 @@ func CopyCard(c card.Card, destCol column.Column) (card.Card, error) {
 		return card.Card{}, err
 	}
 	return newCard, nil
+}
+
+func TrashCard(c card.Card) error {
+	_, err := exec.LookPath("trash")
+	if err != nil {
+		return fmt.Errorf("'trash' command not found, please install trash-cli")
+	}
+	cmd := exec.Command("trash", c.Path)
+	return cmd.Run()
 }
 
 func statePath() string {
