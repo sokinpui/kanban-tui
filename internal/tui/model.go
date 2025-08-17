@@ -154,6 +154,44 @@ func (m Model) View() string {
 	return boardView
 }
 
+func (m *Model) deleteCards(cardsToDelete []card.Card) {
+	if len(cardsToDelete) == 0 {
+		return
+	}
+
+	trashedUUIDs := make(map[string]struct{})
+	for _, c := range cardsToDelete {
+		if err := fs.TrashCard(c); err == nil {
+			trashedUUIDs[c.UUID] = struct{}{}
+		}
+	}
+
+	if len(trashedUUIDs) > 0 {
+		for i := range m.board.Columns {
+			col := &m.board.Columns[i]
+			keptCards := col.Cards[:0]
+			for _, c := range col.Cards {
+				if _, wasTrashed := trashedUUIDs[c.UUID]; !wasTrashed {
+					keptCards = append(keptCards, c)
+				}
+			}
+			col.Cards = keptCards
+		}
+
+		keptClipboard := m.clipboard[:0]
+		for _, c := range m.clipboard {
+			if _, wasTrashed := trashedUUIDs[c.UUID]; !wasTrashed {
+				keptClipboard = append(keptClipboard, c)
+			}
+		}
+		m.clipboard = keptClipboard
+
+		m.selected = make(map[string]struct{})
+		fs.WriteBoard(m.board)
+		m.clampFocusedCard()
+	}
+}
+
 func (m *Model) clampFocusedCard() {
 	if len(m.board.Columns) == 0 {
 		return

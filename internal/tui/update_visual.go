@@ -91,6 +91,19 @@ func (m *Model) updateVisualMode(msg tea.Msg) tea.Cmd {
 		m.mode = normalMode
 		m.selected = make(map[string]struct{})
 		m.visualSelectStart = -1
+
+	case "delete":
+		var cardsToDelete []card.Card
+		if len(m.selected) > 0 {
+			for _, c := range m.board.Columns[m.focusedColumn].Cards {
+				if _, isSelected := m.selected[c.UUID]; isSelected {
+					cardsToDelete = append(cardsToDelete, c)
+				}
+			}
+		}
+		m.deleteCards(cardsToDelete)
+		m.mode = normalMode
+		m.visualSelectStart = -1
 	}
 	return nil
 }

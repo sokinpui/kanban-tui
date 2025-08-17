@@ -15,3 +15,7 @@ func New(title string) Card {
 	now := time.Now()
 	return Card{Title: title, CreatedAt: now, ModifiedAt: now}
 }
+
+func (c Card) HasContent() bool {
+	return c.Content != ""
+}

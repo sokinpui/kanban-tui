@@ -206,41 +206,7 @@ func (m *Model) updateNormalMode(msg tea.Msg) tea.Cmd {
 			cardsToDelete = append(cardsToDelete, m.board.Columns[m.focusedColumn].Cards[cardIndex])
 		}
 
-		if len(cardsToDelete) == 0 {
-			return nil
-		}
-
-		trashedUUIDs := make(map[string]struct{})
-		for _, c := range cardsToDelete {
-			if err := fs.TrashCard(c); err == nil {
-				trashedUUIDs[c.UUID] = struct{}{}
-			}
-		}
-
-		if len(trashedUUIDs) > 0 {
-			for i := range m.board.Columns {
-				col := &m.board.Columns[i]
-				keptCards := col.Cards[:0]
-				for _, c := range col.Cards {
-					if _, wasTrashed := trashedUUIDs[c.UUID]; !wasTrashed {
-						keptCards = append(keptCards, c)
-					}
-				}
-				col.Cards = keptCards
-			}
-
-			keptClipboard := m.clipboard[:0]
-			for _, c := range m.clipboard {
-				if _, wasTrashed := trashedUUIDs[c.UUID]; !wasTrashed {
-					keptClipboard = append(keptClipboard, c)
-				}
-			}
-			m.clipboard = keptClipboard
-
-			m.selected = make(map[string]struct{})
-			fs.WriteBoard(m.board)
-			m.clampFocusedCard()
-		}
+		m.deleteCards(cardsToDelete)
 	}
 	return nil
 }

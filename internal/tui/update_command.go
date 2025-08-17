@@ -68,7 +68,7 @@ func (m *Model) executeCommand() tea.Cmd {
 			if currentFocus > 0 {
 				insertIndex = currentFocus
 			} else {
-				insertIndex = len(currentCol.Cards)
+				insertIndex = 0
 			}
 		}
 		m.createCardMode = "prepend"

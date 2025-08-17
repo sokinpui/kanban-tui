@@ -152,7 +152,12 @@ func renderCard(c card.Card, m *Model, columnIndex, cardIndex int, contentWidth 
 		style = selectedCardStyle
 	}
 
-	return style.Copy().Width(contentWidth).Render(c.Title)
+	title := c.Title
+	if c.HasContent() {
+		title = title + " 📄"
+	}
+
+	return style.Copy().Width(contentWidth).Render(title)
 }
 
 func renderStatusBar(m *Model) string {
