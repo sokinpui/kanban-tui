@@ -106,25 +106,19 @@ func WriteBoard(b board.Board) error {
 }
 
 func CreateSampleBoard(b *board.Board) error {
-	sampleCols := []string{"01-notes", "02-planned", "03-working", "04-done"}
+	sampleCols := []string{"Notes", "Planned", "WIP", "Done"}
 	var columns []column.Column
 
 	if err := os.Mkdir(DataDirName, 0755); err != nil && !os.IsExist(err) {
 		return err
 	}
+
 	for _, colName := range sampleCols {
 		colPath := filepath.Join(DataDirName, colName)
 		if err := os.Mkdir(colPath, 0755); err != nil && !os.IsExist(err) {
 			return err
 		}
 		col := column.New(colName, colPath)
-		if colName == sampleCols[0] {
-			c, err := CreateCard(col, "Welcome to Kanban!")
-			if err != nil {
-				return err
-			}
-			col.Cards = append(col.Cards, c)
-		}
 		columns = append(columns, col)
 	}
 	b.Columns = columns
