@@ -52,6 +52,7 @@ type Model struct {
 	isCut           bool
 	scrollOffset    int
 	createCardMode  string
+	lastGPress      time.Time
 }
 
 func NewModel(b board.Board, focusedColumn, focusedCard int) Model {
@@ -213,6 +214,24 @@ func (m *Model) updateNormalMode(msg tea.Msg) tea.Cmd {
 		currentFocus := m.currentFocusedCard()
 		if currentFocus < len(m.board.Columns[m.focusedColumn].Cards) {
 			m.setCurrentFocusedCard(currentFocus + 1)
+			m.ensureFocusedCardIsVisible()
+		}
+
+	case "g":
+		if time.Since(m.lastGPress) < 500*time.Millisecond {
+			if len(m.board.Columns[m.focusedColumn].Cards) > 0 {
+				m.setCurrentFocusedCard(1)
+				m.ensureFocusedCardIsVisible()
+			}
+			m.lastGPress = time.Time{}
+		} else {
+			m.lastGPress = time.Now()
+		}
+
+	case "G":
+		numCards := len(m.board.Columns[m.focusedColumn].Cards)
+		if numCards > 0 {
+			m.setCurrentFocusedCard(numCards)
 			m.ensureFocusedCardIsVisible()
 		}
 
