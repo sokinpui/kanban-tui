@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
@@ -39,17 +40,18 @@ func openEditor(path string) tea.Cmd {
 }
 
 type Model struct {
-	board         board.Board
-	focusedColumn int
-	focusedCard   int
-	mode          mode
-	textInput     textinput.Model
-	width         int
-	height        int
-	selected      map[string]struct{}
-	clipboard     []card.Card
-	isCut         bool
-	scrollOffset  int
+	board          board.Board
+	focusedColumn  int
+	focusedCard    int
+	mode           mode
+	textInput      textinput.Model
+	width          int
+	height         int
+	selected       map[string]struct{}
+	clipboard      []card.Card
+	isCut          bool
+	scrollOffset   int
+	createCardMode string
 }
 
 func NewModel(b board.Board, focusedColumn, focusedCard int) Model {
@@ -57,14 +59,15 @@ func NewModel(b board.Board, focusedColumn, focusedCard int) Model {
 	ti.Prompt = ":"
 
 	m := Model{
-		board:         b,
-		focusedColumn: focusedColumn,
-		focusedCard:   focusedCard,
-		mode:          normalMode,
-		textInput:     ti,
-		selected:      make(map[string]struct{}),
-		clipboard:     []card.Card{},
-		scrollOffset:  0,
+		board:          b,
+		focusedColumn:  focusedColumn,
+		focusedCard:    focusedCard,
+		mode:           normalMode,
+		textInput:      ti,
+		selected:       make(map[string]struct{}),
+		clipboard:      []card.Card{},
+		scrollOffset:   0,
+		createCardMode: "prepend",
 	}
 
 	if len(m.board.Columns) == 0 {
@@ -158,6 +161,11 @@ func (m *Model) updateNormalMode(msg tea.Msg) tea.Cmd {
 	case "q", "ctrl+c":
 		return tea.Quit
 
+	case "escape":
+		if len(m.selected) > 0 {
+			m.selected = make(map[string]struct{})
+		}
+
 	case ":":
 		m.mode = commandMode
 		m.textInput.SetValue("")
@@ -194,6 +202,18 @@ func (m *Model) updateNormalMode(msg tea.Msg) tea.Cmd {
 			cardToEdit := m.board.Columns[m.focusedColumn].Cards[m.focusedCard-1]
 			return openEditor(cardToEdit.Path)
 		}
+
+	case "O":
+		m.createCardMode = "before"
+		m.mode = commandMode
+		m.textInput.SetValue("new ")
+		return m.textInput.Focus()
+
+	case "o":
+		m.createCardMode = "after"
+		m.mode = commandMode
+		m.textInput.SetValue("new ")
+		return m.textInput.Focus()
 
 	case " ":
 		if m.focusedCard > 0 {
@@ -244,43 +264,62 @@ func (m *Model) updateNormalMode(msg tea.Msg) tea.Cmd {
 			m.selected = make(map[string]struct{})
 		}
 
-	case "p":
-		if len(m.clipboard) > 0 {
-			sort.Slice(m.clipboard, func(i, j int) bool {
-				return m.clipboard[i].CreatedAt.After(m.clipboard[j].CreatedAt)
-			})
+	case "p", "P":
+		if len(m.clipboard) == 0 {
+			return nil
+		}
 
-			destCol := &m.board.Columns[m.focusedColumn]
-			if m.isCut {
-				clipboardUUIDs := make(map[string]struct{}, len(m.clipboard))
-				for i := range m.clipboard {
-					c := &m.clipboard[i]
-					clipboardUUIDs[c.UUID] = struct{}{}
-					fs.MoveCard(c, *destCol)
-				}
+		sort.Slice(m.clipboard, func(i, j int) bool {
+			return m.clipboard[i].CreatedAt.After(m.clipboard[j].CreatedAt)
+		})
 
-				for i := range m.board.Columns {
-					col := &m.board.Columns[i]
-					keptCards := col.Cards[:0]
-					for _, c := range col.Cards {
-						if _, found := clipboardUUIDs[c.UUID]; !found {
-							keptCards = append(keptCards, c)
-						}
-					}
-					col.Cards = keptCards
-				}
-				destCol.Cards = append(m.clipboard, destCol.Cards...)
+		destCol := &m.board.Columns[m.focusedColumn]
+
+		insertIndex := 0
+		if m.focusedCard > 0 {
+			if keyMsg.String() == "p" {
+				insertIndex = m.focusedCard
 			} else {
-				var newCards []card.Card
-				for _, c := range m.clipboard {
-					newCard, err := fs.CopyCard(c, *destCol)
-					if err == nil {
-						newCards = append(newCards, newCard)
-					}
-				}
-				destCol.Cards = append(newCards, destCol.Cards...)
+				insertIndex = m.focusedCard - 1
+			}
+		}
+
+		if insertIndex > len(destCol.Cards) {
+			insertIndex = len(destCol.Cards)
+		}
+
+		var cardsToInsert []card.Card
+		if m.isCut {
+			clipboardUUIDs := make(map[string]struct{}, len(m.clipboard))
+			for i := range m.clipboard {
+				c := &m.clipboard[i]
+				clipboardUUIDs[c.UUID] = struct{}{}
+				fs.MoveCard(c, *destCol)
 			}
 
+			for i := range m.board.Columns {
+				col := &m.board.Columns[i]
+				keptCards := col.Cards[:0]
+				for _, c := range col.Cards {
+					if _, found := clipboardUUIDs[c.UUID]; !found {
+						keptCards = append(keptCards, c)
+					}
+				}
+				col.Cards = keptCards
+			}
+			cardsToInsert = m.clipboard
+		} else {
+			var newCards []card.Card
+			for _, c := range m.clipboard {
+				newCard, err := fs.CopyCard(c, *destCol)
+				if err == nil {
+					newCards = append(newCards, newCard)
+				}
+			}
+			cardsToInsert = newCards
+		}
+		if len(cardsToInsert) > 0 {
+			destCol.Cards = append(destCol.Cards[:insertIndex], append(cardsToInsert, destCol.Cards[insertIndex:]...)...)
 			fs.WriteBoard(m.board)
 			m.clipboard = []card.Card{}
 			m.isCut = false
@@ -348,6 +387,7 @@ func (m *Model) updateCommandMode(msg tea.Msg) tea.Cmd {
 		case tea.KeyEscape, tea.KeyCtrlC:
 			m.mode = normalMode
 			m.textInput.Blur()
+			m.createCardMode = "prepend"
 			return nil
 		case tea.KeyEnter:
 			cmd = m.executeCommand()
@@ -373,6 +413,9 @@ func (m *Model) executeCommand() tea.Cmd {
 	switch command {
 	case "new":
 		title := args
+		if title == "" {
+			return nil
+		}
 		currentCol := &m.board.Columns[m.focusedColumn]
 
 		newCard, err := fs.CreateCard(*currentCol, title)
@@ -380,13 +423,70 @@ func (m *Model) executeCommand() tea.Cmd {
 			return nil
 		}
 
-		currentCol.Cards = append([]card.Card{newCard}, currentCol.Cards...)
+		insertIndex := 0
+		switch m.createCardMode {
+		case "prepend":
+			insertIndex = 0
+		case "before":
+			if m.focusedCard > 0 {
+				insertIndex = m.focusedCard - 1
+			}
+		case "after":
+			if m.focusedCard > 0 {
+				insertIndex = m.focusedCard
+			} else {
+				insertIndex = len(currentCol.Cards)
+			}
+		}
+		m.createCardMode = "prepend"
+
+		if insertIndex > len(currentCol.Cards) {
+			insertIndex = len(currentCol.Cards)
+		}
+
+		currentCol.Cards = append(currentCol.Cards[:insertIndex], append([]card.Card{newCard}, currentCol.Cards[insertIndex:]...)...)
 
 		if err := fs.WriteBoard(m.board); err != nil {
 			return nil
 		}
+		m.focusedCard = insertIndex + 1
+		m.ensureFocusedCardIsVisible()
+	case "sort":
+		sortArgs := strings.Split(args, " ")
+		if len(sortArgs) != 2 {
+			return nil
+		}
+		field, direction := sortArgs[0], sortArgs[1]
 
-		m.focusedCard = 1
+		currentCol := &m.board.Columns[m.focusedColumn]
+		if len(currentCol.Cards) < 2 {
+			return nil
+		}
+
+		sort.Slice(currentCol.Cards, func(i, j int) bool {
+			var timeI, timeJ time.Time
+			switch field {
+			case "modify":
+				timeI = currentCol.Cards[i].ModifiedAt
+				timeJ = currentCol.Cards[j].ModifiedAt
+			case "create":
+				timeI = currentCol.Cards[i].CreatedAt
+				timeJ = currentCol.Cards[j].CreatedAt
+			default:
+				return false
+			}
+
+			if direction == "asc" {
+				return timeI.Before(timeJ)
+			}
+			if direction == "desc" {
+				return timeI.After(timeJ)
+			}
+			return false
+		})
+
+		fs.WriteBoard(m.board)
+		m.focusedCard = 0
 		m.ensureFocusedCardIsVisible()
 	}
 
