@@ -1,8 +1,10 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"os"
+	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"kanban/internal/fs"
@@ -17,14 +19,28 @@ func main() {
 	}
 
 	if len(board.Columns) == 0 {
-		if err := fs.CreateSampleBoard(&board); err != nil {
-			fmt.Fprintf(os.Stderr, "could not create sample board: %v\n", err)
+		fmt.Print("No kanban board (kanban.md) found in the current directory.\nCreate a sample board? (y/N) ")
+		reader := bufio.NewReader(os.Stdin)
+		response, err := reader.ReadString('\n')
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "could not read response: %v\n", err)
 			os.Exit(1)
 		}
-		board, err = fs.LoadBoard()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "could not load board after creating sample: %v\n", err)
-			os.Exit(1)
+
+		if strings.ToLower(strings.TrimSpace(response)) == "y" {
+			if err := fs.CreateSampleBoard(&board); err != nil {
+				fmt.Fprintf(os.Stderr, "could not create sample board: %v\n", err)
+				os.Exit(1)
+			}
+			board, err = fs.LoadBoard()
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "could not load board after creating sample: %v\n", err)
+				os.Exit(1)
+			}
+			fmt.Println("Sample board created. Starting kanban...")
+		} else {
+			fmt.Println("Aborting.")
+			os.Exit(0)
 		}
 	}
 
