@@ -162,18 +162,16 @@ func (m Model) View() string {
 		return ""
 	}
 
-	boardView := renderBoard(&m)
 	statusBar := renderStatusBar(&m)
-
 	statusBarHeight := lipgloss.Height(statusBar)
 	boardHeight := m.height - statusBarHeight
 
-	boardContainer := lipgloss.NewStyle().
-		Height(boardHeight).
-		MaxHeight(boardHeight).
-		Render(boardView)
+	boardView := renderBoard(&m, boardHeight)
 
-	return lipgloss.JoinVertical(lipgloss.Left, boardContainer, statusBar)
+	if statusBar != "" {
+		return lipgloss.JoinVertical(lipgloss.Left, boardView, statusBar)
+	}
+	return boardView
 }
 
 func (m *Model) updateNormalMode(msg tea.Msg) tea.Cmd {
@@ -704,15 +702,6 @@ func (m Model) isCardMarkedForCut(uuid string) bool {
 	return false
 }
 
-func (m *Model) cardAreaHeight() int {
-	statusBarHeight := 0
-	if m.mode == commandMode || m.mode == visualMode {
-		statusBarHeight = 1
-	}
-	headerHeight := 1
-	return m.height - statusBarHeight - headerHeight
-}
-
 func (m *Model) cardWidth(columnWidth int) int {
 	return columnWidth - (columnPaddingHorizontal * 2) - (cardMarginHorizontal * 2)
 }
@@ -729,8 +718,14 @@ func (m *Model) getFocusedColumnWidth() int {
 		return 0
 	}
 	numColumns := len(m.board.Columns)
-	baseColumnWidth := m.width / numColumns
-	remainder := m.width % numColumns
+	numSeparators := numColumns - 1
+	if numSeparators < 0 {
+		numSeparators = 0
+	}
+
+	availableWidth := m.width - numSeparators
+	baseColumnWidth := availableWidth / numColumns
+	remainder := availableWidth % numColumns
 
 	colWidth := baseColumnWidth
 	if m.focusedColumn < remainder {
@@ -772,7 +767,10 @@ func (m *Model) ensureFocusedCardIsVisible() {
 		return
 	}
 
-	cardAreaH := m.cardAreaHeight()
+	statusBar := renderStatusBar(m)
+	statusBarHeight := lipgloss.Height(statusBar)
+	headerHeight := 1 // An approximation of the column header height
+	cardAreaH := m.height - statusBarHeight - headerHeight
 	cards := m.board.Columns[m.focusedColumn].Cards
 
 	currentHeight := 0

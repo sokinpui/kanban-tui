@@ -49,14 +49,21 @@ var (
 			Background(lipgloss.Color("#3e6452"))
 )
 
-func renderBoard(m *Model) string {
-	if m.width <= 0 || len(m.board.Columns) == 0 {
+func renderBoard(m *Model, height int) string {
+	if m.width <= 0 || len(m.board.Columns) == 0 || height <= 0 {
 		return ""
 	}
 
 	numColumns := len(m.board.Columns)
-	baseColumnWidth := m.width / numColumns
-	remainder := m.width % numColumns
+	separator := "│"
+	numSeparators := numColumns - 1
+	if numSeparators < 0 {
+		numSeparators = 0
+	}
+
+	availableWidth := m.width - numSeparators
+	baseColumnWidth := availableWidth / numColumns
+	remainder := availableWidth % numColumns
 
 	var renderedColumns []string
 	for i, col := range m.board.Columns {
@@ -64,13 +71,22 @@ func renderBoard(m *Model) string {
 		if i < remainder {
 			colWidth++
 		}
-		renderedColumns = append(renderedColumns, renderColumn(col, m, i, colWidth))
+		renderedColumns = append(renderedColumns, renderColumn(col, m, i, colWidth, height))
 	}
-	boardView := lipgloss.JoinHorizontal(lipgloss.Top, renderedColumns...)
-	return boardView
+
+	var parts []string
+	separatorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("238"))
+	for i, s := range renderedColumns {
+		parts = append(parts, s)
+		if i < len(renderedColumns)-1 {
+			parts = append(parts, separatorStyle.Render(separator))
+		}
+	}
+
+	return lipgloss.JoinHorizontal(lipgloss.Top, parts...)
 }
 
-func renderColumn(c column.Column, m *Model, columnIndex int, width int) string {
+func renderColumn(c column.Column, m *Model, columnIndex int, width int, height int) string {
 	isColumnFocused := m.focusedColumn == columnIndex
 	isHeaderFocused := isColumnFocused && m.currentFocusedCard() == 0
 
@@ -85,7 +101,8 @@ func renderColumn(c column.Column, m *Model, columnIndex int, width int) string 
 	renderedHeader := headerStyle.Copy().Width(headerContentWidth).Render(header)
 
 	var renderedCards []string
-	cardAreaHeight := m.cardAreaHeight()
+	headerHeight := lipgloss.Height(renderedHeader)
+	cardAreaHeight := height - headerHeight
 	currentHeight := 0
 	cardContentW := m.cardContentWidth(width)
 
@@ -115,7 +132,7 @@ func renderColumn(c column.Column, m *Model, columnIndex int, width int) string 
 	cards := strings.Join(renderedCards, "\n")
 	columnContent := lipgloss.JoinVertical(lipgloss.Left, renderedHeader, cards)
 
-	return columnStyle.Copy().Width(width).Render(columnContent)
+	return columnStyle.Copy().Width(width).Height(height).Render(columnContent)
 }
 
 func renderCard(c card.Card, m *Model, columnIndex, cardIndex int, contentWidth int) string {
