@@ -3,9 +3,11 @@ package board
 import "kanban/internal/column"
 
 type Board struct {
+	// Path is the root directory containing kanban.md
+	Path    string
 	Columns []column.Column
 }
 
-func New(columns []column.Column) Board {
-	return Board{Columns: columns}
+func New(path string, columns []column.Column) Board {
+	return Board{Path: path, Columns: columns}
 }

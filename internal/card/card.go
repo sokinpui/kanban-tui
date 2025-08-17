@@ -1,9 +1,17 @@
 package card
 
+import "time"
+
 type Card struct {
-	Title string
+	UUID       string    `yaml:"-"` // Derived from filename
+	Path       string    `yaml:"-"`
+	Title      string    `yaml:"title"`
+	Content    string    `yaml:"-"`
+	CreatedAt  time.Time `yaml:"createdAt"`
+	ModifiedAt time.Time `yaml:"modifiedAt"`
 }
 
 func New(title string) Card {
-	return Card{Title: title}
+	now := time.Now()
+	return Card{Title: title, CreatedAt: now, ModifiedAt: now}
 }
