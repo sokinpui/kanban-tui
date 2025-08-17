@@ -179,10 +179,10 @@ func (m *Model) updateNormalMode(msg tea.Msg) tea.Cmd {
 	case "q", "ctrl+c":
 		return tea.Quit
 
-	case "escape":
-		if len(m.selected) > 0 {
-			m.selected = make(map[string]struct{})
-		}
+	case "esc":
+		m.selected = make(map[string]struct{})
+		m.clipboard = []card.Card{}
+		m.isCut = false
 
 	case ":":
 		m.mode = commandMode
@@ -429,6 +429,9 @@ func (m *Model) updateCommandMode(msg tea.Msg) tea.Cmd {
 			m.mode = normalMode
 			m.textInput.Blur()
 			m.createCardMode = "prepend"
+			m.selected = make(map[string]struct{})
+			m.clipboard = []card.Card{}
+			m.isCut = false
 			return nil
 		case tea.KeyEnter:
 			cmd = m.executeCommand()
