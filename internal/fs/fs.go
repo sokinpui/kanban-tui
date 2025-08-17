@@ -216,6 +216,30 @@ func TrashCard(c card.Card) error {
 	return cmd.Run()
 }
 
+func CreateColumn(name string) (column.Column, error) {
+	colPath := filepath.Join(DataDirName, name)
+	if err := os.Mkdir(colPath, 0755); err != nil {
+		return column.Column{}, err
+	}
+	return column.New(name, colPath), nil
+}
+
+func DeleteColumn(col column.Column) error {
+	for _, crd := range col.Cards {
+		if err := TrashCard(crd); err != nil {
+			// Log or handle error, but try to continue
+			fmt.Fprintf(os.Stderr, "could not trash card %s: %v\n", crd.Path, err)
+		}
+	}
+
+	_, err := exec.LookPath("trash")
+	if err != nil {
+		return fmt.Errorf("'trash' command not found, please install trash-cli")
+	}
+	cmd := exec.Command("trash", col.Path)
+	return cmd.Run()
+}
+
 func statePath() string {
 	return filepath.Join(DataDirName, StateFileName)
 }

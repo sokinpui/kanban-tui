@@ -611,6 +611,45 @@ func (m *Model) executeCommand() tea.Cmd {
 		fs.WriteBoard(m.board)
 		m.setCurrentFocusedCard(0)
 		m.ensureFocusedCardIsVisible()
+	case "create":
+		name := args
+		if name == "" {
+			return nil
+		}
+		newCol, err := fs.CreateColumn(name)
+		if err != nil {
+			// TODO: Show error to user
+			return nil
+		}
+		m.board.Columns = append(m.board.Columns, newCol)
+		m.columnCardFocus = append(m.columnCardFocus, 0)
+		fs.WriteBoard(m.board)
+		m.focusedColumn = len(m.board.Columns) - 1
+
+	case "delete":
+		if m.currentFocusedCard() != 0 || len(m.board.Columns) == 0 {
+			return nil
+		}
+
+		colToDelete := m.board.Columns[m.focusedColumn]
+		if err := fs.DeleteColumn(colToDelete); err != nil {
+			// TODO: Show error to user
+			return nil
+		}
+
+		// Remove column from board
+		m.board.Columns = append(m.board.Columns[:m.focusedColumn], m.board.Columns[m.focusedColumn+1:]...)
+		// Remove focus state for that column
+		m.columnCardFocus = append(m.columnCardFocus[:m.focusedColumn], m.columnCardFocus[m.focusedColumn+1:]...)
+
+		// Adjust focus
+		if m.focusedColumn >= len(m.board.Columns) {
+			m.focusedColumn = len(m.board.Columns) - 1
+		}
+		if m.focusedColumn < 0 {
+			m.focusedColumn = 0
+		}
+		fs.WriteBoard(m.board)
 	}
 
 	return nil
@@ -670,7 +709,7 @@ func (m Model) isCardMarkedForCut(uuid string) bool {
 
 func (m *Model) cardAreaHeight() int {
 	statusBarHeight := 0
-	if m.mode == commandMode {
+	if m.mode == commandMode || m.mode == visualMode {
 		statusBarHeight = 1
 	}
 	headerHeight := 1
