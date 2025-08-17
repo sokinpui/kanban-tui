@@ -26,7 +26,9 @@ var (
 			Margin(0, cardMarginHorizontal)
 
 	selectedCardStyle = cardStyle.Copy().
-				BorderForeground(lipgloss.Color("220"))
+				BorderForeground(lipgloss.Color("220")).
+				Background(lipgloss.Color("#3e6452")).
+				Foreground(lipgloss.Color("231"))
 
 	cutCardStyle = cardStyle.Copy().
 			BorderForeground(lipgloss.Color("196"))
@@ -35,8 +37,16 @@ var (
 				Border(lipgloss.DoubleBorder()).
 				BorderForeground(lipgloss.Color("205"))
 
+	focusedAndSelectedCardStyle = selectedCardStyle.Copy().
+					Border(lipgloss.DoubleBorder()).
+					BorderForeground(lipgloss.Color("205"))
+
 	columnStyle = lipgloss.NewStyle().
 			Padding(0, columnPaddingHorizontal)
+
+	statusBarStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("231")).
+			Background(lipgloss.Color("#3e6452"))
 )
 
 func renderBoard(m *Model) string {
@@ -115,22 +125,26 @@ func renderCard(c card.Card, m *Model, columnIndex, cardIndex int, contentWidth 
 
 	style := cardStyle.Copy()
 
-	if isMarkedForCut {
+	if isFocused && isSelected {
+		style = focusedAndSelectedCardStyle
+	} else if isFocused {
+		style = focusedCardStyle
+	} else if isMarkedForCut {
 		style = cutCardStyle
 	} else if isSelected {
 		style = selectedCardStyle
-	}
-
-	if isFocused {
-		style = focusedCardStyle
 	}
 
 	return style.Copy().Width(contentWidth).Render(c.Title)
 }
 
 func renderStatusBar(m *Model) string {
-	if m.mode == commandMode {
+	switch m.mode {
+	case commandMode:
 		return m.textInput.View()
+	case visualMode:
+		return statusBarStyle.Copy().Width(m.width).Render("-- VISUAL --")
+	default:
+		return ""
 	}
-	return ""
 }
