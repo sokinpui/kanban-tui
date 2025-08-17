@@ -13,6 +13,8 @@ const (
 	insertMode
 )
 
+const defaultCardWidth = 22
+
 type Model struct {
 	board         board.Board
 	focusedColumn int
@@ -25,7 +27,7 @@ func NewModel(b board.Board) Model {
 	ti := textinput.New()
 	ti.Placeholder = "Card title"
 	ti.CharLimit = 156
-	ti.Width = 22
+	ti.Width = defaultCardWidth
 
 	return Model{
 		board:         b,
@@ -56,6 +58,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.board.Columns[m.focusedColumn].Cards[m.focusedCard].Title = m.textInput.Value()
 				}
 				m.textInput.Blur()
+				m.textInput.Width = defaultCardWidth
 				return m, nil
 			default:
 				m.textInput, cmd = m.textInput.Update(msg)
@@ -105,7 +108,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "i":
 			if len(m.board.Columns[m.focusedColumn].Cards) > 0 {
 				m.mode = insertMode
-				m.textInput.SetValue(m.board.Columns[m.focusedColumn].Cards[m.focusedCard].Title)
+				currentTitle := m.board.Columns[m.focusedColumn].Cards[m.focusedCard].Title
+				m.textInput.SetValue(currentTitle)
+
+				newWidth := len(currentTitle)
+				if newWidth < defaultCardWidth {
+					newWidth = defaultCardWidth
+				}
+				m.textInput.Width = newWidth
+
 				return m, m.textInput.Focus()
 			}
 		}

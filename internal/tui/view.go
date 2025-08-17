@@ -25,6 +25,9 @@ var (
 	focusedCardStyle = cardStyle.Copy().
 				BorderForeground(lipgloss.Color("205"))
 
+	expandedCardStyle = focusedCardStyle.Copy().
+				UnsetWidth()
+
 	columnStyle = lipgloss.NewStyle().
 			Padding(0, 1)
 )
@@ -53,7 +56,7 @@ func renderColumn(c column.Column, m Model, columnIndex int) string {
 func renderCard(c card.Card, m Model, columnIndex, cardIndex int) string {
 	isFocused := m.focusedColumn == columnIndex && m.focusedCard == cardIndex
 	if isFocused && m.mode == insertMode {
-		return focusedCardStyle.Render(m.textInput.View())
+		return expandedCardStyle.Render(m.textInput.View())
 	}
 
 	style := cardStyle
