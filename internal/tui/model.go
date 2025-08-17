@@ -535,9 +535,6 @@ func (m *Model) executeCommand() tea.Cmd {
 	switch command {
 	case "new":
 		title := args
-		if title == "" {
-			return nil
-		}
 		currentCol := &m.board.Columns[m.focusedColumn]
 
 		newCard, err := fs.CreateCard(*currentCol, title)
