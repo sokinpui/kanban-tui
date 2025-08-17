@@ -296,16 +296,11 @@ func (m *Model) ensureFocusedCardIsVisible() {
 
 	for i := m.scrollOffset; i < len(cards); i++ {
 		cardHeight := m.getCardRenderHeight(cards[i])
-		separatorHeight := 0
-		if i > m.scrollOffset {
-			separatorHeight = 1
-		}
-
-		if currentHeight+cardHeight+separatorHeight > cardAreaH {
+		if currentHeight+cardHeight > cardAreaH {
 			break
 		}
 
-		currentHeight += cardHeight + separatorHeight
+		currentHeight += cardHeight
 		lastVisibleIdx = i
 	}
 
@@ -314,16 +309,11 @@ func (m *Model) ensureFocusedCardIsVisible() {
 		visibleHeight := 0
 		for {
 			cardHeight := m.getCardRenderHeight(cards[newOffset])
-			separatorHeight := 0
-			if newOffset < focusedIdx {
-				separatorHeight = 1
-			}
-
-			if visibleHeight+cardHeight+separatorHeight > cardAreaH {
+			if visibleHeight+cardHeight > cardAreaH {
 				newOffset++
 				break
 			}
-			visibleHeight += cardHeight + separatorHeight
+			visibleHeight += cardHeight
 
 			if newOffset == 0 {
 				break

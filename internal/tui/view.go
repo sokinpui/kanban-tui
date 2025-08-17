@@ -115,18 +115,12 @@ func renderColumn(c column.Column, m *Model, columnIndex int, width int, height 
 		crd := c.Cards[i]
 		renderedCard := renderCard(crd, m, columnIndex, i, cardContentW)
 		cardHeight := lipgloss.Height(renderedCard)
-
-		separatorHeight := 0
-		if len(renderedCards) > 0 {
-			separatorHeight = 1
-		}
-
-		if currentHeight+cardHeight+separatorHeight > cardAreaHeight {
+		if currentHeight+cardHeight > cardAreaHeight {
 			break
 		}
 
 		renderedCards = append(renderedCards, renderedCard)
-		currentHeight += cardHeight + separatorHeight
+		currentHeight += cardHeight
 	}
 
 	cards := strings.Join(renderedCards, "\n")
