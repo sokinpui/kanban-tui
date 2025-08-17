@@ -129,7 +129,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) View() string {
-	if m.height == 0 {
+	if m.height == 0 || m.width == 0 {
 		return ""
 	}
 
@@ -370,8 +370,42 @@ func (m *Model) cardAreaHeight() int {
 	return m.height - statusBarHeight - headerHeight
 }
 
+func (m *Model) cardWidth(columnWidth int) int {
+	return columnWidth - (columnPaddingHorizontal * 2) - (cardMarginHorizontal * 2)
+}
+
+func (m *Model) cardContentWidth(columnWidth int) int {
+	cardW := m.cardWidth(columnWidth)
+	cardPadding := 2 // cardStyle.Padding(0, 1) -> 1 left, 1 right
+	cardBorder := 2  // 1 left, 1 right
+	return cardW - cardPadding - cardBorder
+}
+
+func (m *Model) getFocusedColumnWidth() int {
+	if m.width == 0 || len(m.board.Columns) == 0 {
+		return 0
+	}
+	numColumns := len(m.board.Columns)
+	baseColumnWidth := m.width / numColumns
+	remainder := m.width % numColumns
+
+	colWidth := baseColumnWidth
+	if m.focusedColumn < remainder {
+		colWidth++
+	}
+	return colWidth
+}
+
 func (m *Model) getCardRenderHeight(c card.Card) int {
-	contentStyle := lipgloss.NewStyle().Width(CardContentWidth)
+	focusedColWidth := m.getFocusedColumnWidth()
+	if focusedColWidth == 0 {
+		return 2
+	}
+	contentW := m.cardContentWidth(focusedColWidth)
+	if contentW < 1 {
+		return 2 // just border height
+	}
+	contentStyle := lipgloss.NewStyle().Width(contentW)
 	contentHeight := lipgloss.Height(contentStyle.Render(c.Title))
 	borderHeight := 2 // For lipgloss.RoundedBorder
 	return contentHeight + borderHeight

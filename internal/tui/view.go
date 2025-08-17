@@ -23,8 +23,7 @@ var (
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(lipgloss.Color("240")).
 			Padding(0, 1).
-			Margin(0, cardMarginHorizontal).
-			Width(CardWidth)
+			Margin(0, cardMarginHorizontal)
 
 	selectedCardStyle = cardStyle.Copy().
 				BorderForeground(lipgloss.Color("220"))
@@ -41,30 +40,44 @@ var (
 )
 
 func renderBoard(m *Model) string {
+	if m.width <= 0 || len(m.board.Columns) == 0 {
+		return ""
+	}
+
+	numColumns := len(m.board.Columns)
+	baseColumnWidth := m.width / numColumns
+	remainder := m.width % numColumns
+
 	var renderedColumns []string
 	for i, col := range m.board.Columns {
-		renderedColumns = append(renderedColumns, renderColumn(col, m, i))
+		colWidth := baseColumnWidth
+		if i < remainder {
+			colWidth++
+		}
+		renderedColumns = append(renderedColumns, renderColumn(col, m, i, colWidth))
 	}
 	boardView := lipgloss.JoinHorizontal(lipgloss.Top, renderedColumns...)
 	return boardView
 }
 
-func renderColumn(c column.Column, m *Model, columnIndex int) string {
+func renderColumn(c column.Column, m *Model, columnIndex int, width int) string {
 	isColumnFocused := m.focusedColumn == columnIndex
 	isHeaderFocused := isColumnFocused && m.focusedCard == 0
 
 	header := fmt.Sprintf("%s %d", c.Title, c.CardCount())
 
-	var renderedHeader string
+	headerStyle := columnHeaderStyle
 	if isHeaderFocused {
-		renderedHeader = focusedColumnHeaderStyle.Render(header)
-	} else {
-		renderedHeader = columnHeaderStyle.Render(header)
+		headerStyle = focusedColumnHeaderStyle
 	}
+
+	headerContentWidth := width - columnStyle.GetHorizontalPadding() - headerStyle.GetHorizontalPadding()
+	renderedHeader := headerStyle.Copy().Width(headerContentWidth).Render(header)
 
 	var renderedCards []string
 	cardAreaHeight := m.cardAreaHeight()
 	currentHeight := 0
+	cardContentW := m.cardContentWidth(width)
 
 	start := m.scrollOffset
 	if start < 0 {
@@ -73,7 +86,7 @@ func renderColumn(c column.Column, m *Model, columnIndex int) string {
 
 	for i := start; i < len(c.Cards); i++ {
 		crd := c.Cards[i]
-		renderedCard := renderCard(crd, m, columnIndex, i)
+		renderedCard := renderCard(crd, m, columnIndex, i, cardContentW)
 		cardHeight := lipgloss.Height(renderedCard)
 
 		separatorHeight := 0
@@ -90,11 +103,12 @@ func renderColumn(c column.Column, m *Model, columnIndex int) string {
 	}
 
 	cards := strings.Join(renderedCards, "\n")
+	columnContent := lipgloss.JoinVertical(lipgloss.Left, renderedHeader, cards)
 
-	return columnStyle.Render(lipgloss.JoinVertical(lipgloss.Left, renderedHeader, cards))
+	return columnStyle.Copy().Width(width).Render(columnContent)
 }
 
-func renderCard(c card.Card, m *Model, columnIndex, cardIndex int) string {
+func renderCard(c card.Card, m *Model, columnIndex, cardIndex int, contentWidth int) string {
 	isFocused := m.focusedColumn == columnIndex && m.focusedCard == cardIndex+1
 	_, isSelected := m.selected[c.UUID]
 	isMarkedForCut := m.isCardMarkedForCut(c.UUID)
@@ -111,7 +125,7 @@ func renderCard(c card.Card, m *Model, columnIndex, cardIndex int) string {
 		style = focusedCardStyle
 	}
 
-	return style.Render(c.Title)
+	return style.Copy().Width(contentWidth).Render(c.Title)
 }
 
 func renderStatusBar(m *Model) string {
