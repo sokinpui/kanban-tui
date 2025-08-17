@@ -1,0 +1,246 @@
+// internal/tui/update_normal.go
+package tui
+
+import (
+	"sort"
+	"time"
+
+	tea "github.com/charmbracelet/bubbletea"
+	"kanban/internal/card"
+	"kanban/internal/fs"
+)
+
+func (m *Model) updateNormalMode(msg tea.Msg) tea.Cmd {
+	keyMsg, ok := msg.(tea.KeyMsg)
+	if !ok {
+		return nil
+	}
+
+	switch keyMsg.String() {
+	case "q", "ctrl+c":
+		return tea.Quit
+
+	case "esc":
+		m.selected = make(map[string]struct{})
+		m.clipboard = []card.Card{}
+		m.isCut = false
+
+	case ":":
+		m.mode = commandMode
+		m.textInput.SetValue("")
+		return m.textInput.Focus()
+
+	case "h", "left":
+		if m.focusedColumn > 0 {
+			m.focusedColumn--
+			m.clampFocusedCard()
+			m.ensureFocusedCardIsVisible()
+		}
+
+	case "l", "right":
+		if m.focusedColumn < len(m.board.Columns)-1 {
+			m.focusedColumn++
+			m.clampFocusedCard()
+			m.ensureFocusedCardIsVisible()
+		}
+
+	case "k", "up":
+		currentFocus := m.currentFocusedCard()
+		if currentFocus > 0 {
+			m.setCurrentFocusedCard(currentFocus - 1)
+			m.ensureFocusedCardIsVisible()
+		}
+
+	case "j", "down":
+		currentFocus := m.currentFocusedCard()
+		if currentFocus < len(m.board.Columns[m.focusedColumn].Cards) {
+			m.setCurrentFocusedCard(currentFocus + 1)
+			m.ensureFocusedCardIsVisible()
+		}
+
+	case "g":
+		if time.Since(m.lastGPress) < 500*time.Millisecond {
+			if len(m.board.Columns[m.focusedColumn].Cards) > 0 {
+				m.setCurrentFocusedCard(1)
+				m.ensureFocusedCardIsVisible()
+			}
+			m.lastGPress = time.Time{}
+		} else {
+			m.lastGPress = time.Now()
+		}
+
+	case "G":
+		numCards := len(m.board.Columns[m.focusedColumn].Cards)
+		if numCards > 0 {
+			m.setCurrentFocusedCard(numCards)
+			m.ensureFocusedCardIsVisible()
+		}
+
+	case "enter":
+		currentFocus := m.currentFocusedCard()
+		if currentFocus > 0 {
+			cardToEdit := m.board.Columns[m.focusedColumn].Cards[currentFocus-1]
+			return openEditor(cardToEdit.Path)
+		}
+
+	case "O":
+		m.createCardMode = "before"
+		m.mode = commandMode
+		m.textInput.SetValue("new ")
+		return m.textInput.Focus()
+
+	case "o":
+		m.createCardMode = "after"
+		m.mode = commandMode
+		m.textInput.SetValue("new ")
+		return m.textInput.Focus()
+
+	case "v", "V":
+		currentFocus := m.currentFocusedCard()
+		if currentFocus > 0 {
+			m.mode = visualMode
+			m.visualSelectStart = currentFocus - 1
+			m.updateVisualSelection()
+		}
+
+	case "y":
+		if time.Since(m.lastYPress) < 500*time.Millisecond { // yy
+			currentFocus := m.currentFocusedCard()
+			if currentFocus > 0 {
+				m.clipboard = []card.Card{m.board.Columns[m.focusedColumn].Cards[currentFocus-1]}
+				m.isCut = false
+				m.selected = make(map[string]struct{})
+			}
+			m.lastYPress = time.Time{}
+		} else {
+			m.lastYPress = time.Now()
+		}
+
+	case "d":
+		if time.Since(m.lastDPress) < 500*time.Millisecond { // dd
+			currentFocus := m.currentFocusedCard()
+			if currentFocus > 0 {
+				m.clipboard = []card.Card{m.board.Columns[m.focusedColumn].Cards[currentFocus-1]}
+				m.isCut = true
+				m.selected = make(map[string]struct{})
+			}
+			m.lastDPress = time.Time{}
+		} else {
+			m.lastDPress = time.Now()
+		}
+
+	case "p", "P":
+		if len(m.clipboard) == 0 {
+			return nil
+		}
+
+		sort.Slice(m.clipboard, func(i, j int) bool {
+			return m.clipboard[i].CreatedAt.After(m.clipboard[j].CreatedAt)
+		})
+
+		destCol := &m.board.Columns[m.focusedColumn]
+
+		insertIndex := 0
+		currentFocus := m.currentFocusedCard()
+		if currentFocus > 0 {
+			if keyMsg.String() == "p" {
+				insertIndex = currentFocus
+			} else {
+				insertIndex = currentFocus - 1
+			}
+		}
+
+		if insertIndex > len(destCol.Cards) {
+			insertIndex = len(destCol.Cards)
+		}
+
+		var cardsToInsert []card.Card
+		if m.isCut {
+			clipboardUUIDs := make(map[string]struct{}, len(m.clipboard))
+			for i := range m.clipboard {
+				c := &m.clipboard[i]
+				clipboardUUIDs[c.UUID] = struct{}{}
+				fs.MoveCard(c, *destCol)
+			}
+
+			for i := range m.board.Columns {
+				col := &m.board.Columns[i]
+				keptCards := col.Cards[:0]
+				for _, c := range col.Cards {
+					if _, found := clipboardUUIDs[c.UUID]; !found {
+						keptCards = append(keptCards, c)
+					}
+				}
+				col.Cards = keptCards
+			}
+			cardsToInsert = m.clipboard
+		} else {
+			var newCards []card.Card
+			for _, c := range m.clipboard {
+				newCard, err := fs.CopyCard(c, *destCol)
+				if err == nil {
+					newCards = append(newCards, newCard)
+				}
+			}
+			cardsToInsert = newCards
+		}
+		if len(cardsToInsert) > 0 {
+			destCol.Cards = append(destCol.Cards[:insertIndex], append(cardsToInsert, destCol.Cards[insertIndex:]...)...)
+			fs.WriteBoard(m.board)
+			m.clipboard = []card.Card{}
+			m.isCut = false
+		}
+
+	case "delete":
+		var cardsToDelete []card.Card
+		if len(m.selected) > 0 {
+			for _, col := range m.board.Columns {
+				for _, c := range col.Cards {
+					if _, isSelected := m.selected[c.UUID]; isSelected {
+						cardsToDelete = append(cardsToDelete, c)
+					}
+				}
+			}
+		} else if m.currentFocusedCard() > 0 {
+			cardIndex := m.currentFocusedCard() - 1
+			cardsToDelete = append(cardsToDelete, m.board.Columns[m.focusedColumn].Cards[cardIndex])
+		}
+
+		if len(cardsToDelete) == 0 {
+			return nil
+		}
+
+		trashedUUIDs := make(map[string]struct{})
+		for _, c := range cardsToDelete {
+			if err := fs.TrashCard(c); err == nil {
+				trashedUUIDs[c.UUID] = struct{}{}
+			}
+		}
+
+		if len(trashedUUIDs) > 0 {
+			for i := range m.board.Columns {
+				col := &m.board.Columns[i]
+				keptCards := col.Cards[:0]
+				for _, c := range col.Cards {
+					if _, wasTrashed := trashedUUIDs[c.UUID]; !wasTrashed {
+						keptCards = append(keptCards, c)
+					}
+				}
+				col.Cards = keptCards
+			}
+
+			keptClipboard := m.clipboard[:0]
+			for _, c := range m.clipboard {
+				if _, wasTrashed := trashedUUIDs[c.UUID]; !wasTrashed {
+					keptClipboard = append(keptClipboard, c)
+				}
+			}
+			m.clipboard = keptClipboard
+
+			m.selected = make(map[string]struct{})
+			fs.WriteBoard(m.board)
+			m.clampFocusedCard()
+		}
+	}
+	return nil
+}
