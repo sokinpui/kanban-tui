@@ -21,6 +21,7 @@ type mode int
 const (
 	normalMode mode = iota
 	commandMode
+	visualMode
 )
 
 type editorFinishedMsg struct {
@@ -40,19 +41,22 @@ func openEditor(path string) tea.Cmd {
 }
 
 type Model struct {
-	board           board.Board
-	focusedColumn   int
-	columnCardFocus []int
-	mode            mode
-	textInput       textinput.Model
-	width           int
-	height          int
-	selected        map[string]struct{}
-	clipboard       []card.Card
-	isCut           bool
-	scrollOffset    int
-	createCardMode  string
-	lastGPress      time.Time
+	board             board.Board
+	focusedColumn     int
+	columnCardFocus   []int
+	mode              mode
+	textInput         textinput.Model
+	width             int
+	height            int
+	selected          map[string]struct{}
+	clipboard         []card.Card
+	isCut             bool
+	scrollOffset      int
+	createCardMode    string
+	lastGPress        time.Time
+	lastYPress        time.Time
+	lastDPress        time.Time
+	visualSelectStart int
 }
 
 func NewModel(b board.Board, focusedColumn, focusedCard int) Model {
@@ -60,14 +64,15 @@ func NewModel(b board.Board, focusedColumn, focusedCard int) Model {
 	ti.Prompt = ":"
 
 	m := Model{
-		board:           b,
-		columnCardFocus: make([]int, len(b.Columns)),
-		mode:            normalMode,
-		textInput:       ti,
-		selected:        make(map[string]struct{}),
-		clipboard:       []card.Card{},
-		scrollOffset:    0,
-		createCardMode:  "prepend",
+		board:             b,
+		columnCardFocus:   make([]int, len(b.Columns)),
+		mode:              normalMode,
+		textInput:         ti,
+		selected:          make(map[string]struct{}),
+		clipboard:         []card.Card{},
+		scrollOffset:      0,
+		createCardMode:    "prepend",
+		visualSelectStart: -1,
 	}
 
 	if len(m.board.Columns) == 0 {
@@ -144,6 +149,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch m.mode {
 	case commandMode:
 		cmd = m.updateCommandMode(msg)
+	case visualMode:
+		cmd = m.updateVisualMode(msg)
 	default: // normalMode
 		cmd = m.updateNormalMode(msg)
 	}
@@ -254,54 +261,38 @@ func (m *Model) updateNormalMode(msg tea.Msg) tea.Cmd {
 		m.textInput.SetValue("new ")
 		return m.textInput.Focus()
 
-	case " ":
+	case "v", "V":
 		currentFocus := m.currentFocusedCard()
 		if currentFocus > 0 {
-			c := m.board.Columns[m.focusedColumn].Cards[currentFocus-1]
-			if _, ok := m.selected[c.UUID]; ok {
-				delete(m.selected, c.UUID)
-			} else {
-				m.selected[c.UUID] = struct{}{}
-			}
-		}
-
-	case "v":
-		if len(m.board.Columns[m.focusedColumn].Cards) > 0 {
-			for _, c := range m.board.Columns[m.focusedColumn].Cards {
-				if _, ok := m.selected[c.UUID]; ok {
-					delete(m.selected, c.UUID)
-				} else {
-					m.selected[c.UUID] = struct{}{}
-				}
-			}
+			m.mode = visualMode
+			m.visualSelectStart = currentFocus - 1
+			m.updateVisualSelection()
 		}
 
 	case "y":
-		if len(m.selected) > 0 {
-			m.clipboard = []card.Card{}
-			m.isCut = false
-			for _, col := range m.board.Columns {
-				for _, c := range col.Cards {
-					if _, ok := m.selected[c.UUID]; ok {
-						m.clipboard = append(m.clipboard, c)
-					}
-				}
+		if time.Since(m.lastYPress) < 500*time.Millisecond { // yy
+			currentFocus := m.currentFocusedCard()
+			if currentFocus > 0 {
+				m.clipboard = []card.Card{m.board.Columns[m.focusedColumn].Cards[currentFocus-1]}
+				m.isCut = false
+				m.selected = make(map[string]struct{})
 			}
-			m.selected = make(map[string]struct{})
+			m.lastYPress = time.Time{}
+		} else {
+			m.lastYPress = time.Now()
 		}
 
 	case "d":
-		if len(m.selected) > 0 {
-			m.clipboard = []card.Card{}
-			m.isCut = true
-			for _, col := range m.board.Columns {
-				for _, c := range col.Cards {
-					if _, ok := m.selected[c.UUID]; ok {
-						m.clipboard = append(m.clipboard, c)
-					}
-				}
+		if time.Since(m.lastDPress) < 500*time.Millisecond { // dd
+			currentFocus := m.currentFocusedCard()
+			if currentFocus > 0 {
+				m.clipboard = []card.Card{m.board.Columns[m.focusedColumn].Cards[currentFocus-1]}
+				m.isCut = true
+				m.selected = make(map[string]struct{})
 			}
-			m.selected = make(map[string]struct{})
+			m.lastDPress = time.Time{}
+		} else {
+			m.lastDPress = time.Now()
 		}
 
 	case "p", "P":
@@ -416,6 +407,93 @@ func (m *Model) updateNormalMode(msg tea.Msg) tea.Cmd {
 			fs.WriteBoard(m.board)
 			m.clampFocusedCard()
 		}
+	}
+	return nil
+}
+
+func (m *Model) updateVisualMode(msg tea.Msg) tea.Cmd {
+	keyMsg, ok := msg.(tea.KeyMsg)
+	if !ok {
+		return nil
+	}
+
+	switch keyMsg.String() {
+	case "q", "ctrl+c":
+		return tea.Quit
+
+	case "esc", "v", "V":
+		m.mode = normalMode
+		m.selected = make(map[string]struct{})
+		m.visualSelectStart = -1
+
+	case "h", "left", "l", "right":
+		m.mode = normalMode
+		m.selected = make(map[string]struct{})
+		m.visualSelectStart = -1
+
+	case "j", "down":
+		currentFocus := m.currentFocusedCard()
+		if currentFocus < len(m.board.Columns[m.focusedColumn].Cards) {
+			m.setCurrentFocusedCard(currentFocus + 1)
+			m.updateVisualSelection()
+			m.ensureFocusedCardIsVisible()
+		}
+
+	case "k", "up":
+		currentFocus := m.currentFocusedCard()
+		if currentFocus > 1 { // Stop at the first card
+			m.setCurrentFocusedCard(currentFocus - 1)
+			m.updateVisualSelection()
+			m.ensureFocusedCardIsVisible()
+		}
+
+	case "g":
+		if time.Since(m.lastGPress) < 500*time.Millisecond {
+			if len(m.board.Columns[m.focusedColumn].Cards) > 0 {
+				m.setCurrentFocusedCard(1)
+				m.updateVisualSelection()
+				m.ensureFocusedCardIsVisible()
+			}
+			m.lastGPress = time.Time{}
+		} else {
+			m.lastGPress = time.Now()
+		}
+
+	case "G":
+		numCards := len(m.board.Columns[m.focusedColumn].Cards)
+		if numCards > 0 {
+			m.setCurrentFocusedCard(numCards)
+			m.updateVisualSelection()
+			m.ensureFocusedCardIsVisible()
+		}
+
+	case "y":
+		if len(m.selected) > 0 {
+			m.clipboard = []card.Card{}
+			m.isCut = false
+			for _, c := range m.board.Columns[m.focusedColumn].Cards {
+				if _, ok := m.selected[c.UUID]; ok {
+					m.clipboard = append(m.clipboard, c)
+				}
+			}
+		}
+		m.mode = normalMode
+		m.selected = make(map[string]struct{})
+		m.visualSelectStart = -1
+
+	case "d":
+		if len(m.selected) > 0 {
+			m.clipboard = []card.Card{}
+			m.isCut = true
+			for _, c := range m.board.Columns[m.focusedColumn].Cards {
+				if _, ok := m.selected[c.UUID]; ok {
+					m.clipboard = append(m.clipboard, c)
+				}
+			}
+		}
+		m.mode = normalMode
+		m.selected = make(map[string]struct{})
+		m.visualSelectStart = -1
 	}
 	return nil
 }
@@ -552,6 +630,30 @@ func (m *Model) clampFocusedCard() {
 		currentFocus = maxIndex
 	}
 	m.setCurrentFocusedCard(currentFocus)
+}
+
+func (m *Model) updateVisualSelection() {
+	m.selected = make(map[string]struct{})
+	if m.visualSelectStart == -1 {
+		return
+	}
+
+	currentFocusIdx := m.currentFocusedCard() - 1
+	if currentFocusIdx < 0 {
+		return
+	}
+
+	start, end := m.visualSelectStart, currentFocusIdx
+	if start > end {
+		start, end = end, start
+	}
+
+	cards := m.board.Columns[m.focusedColumn].Cards
+	for i := start; i <= end; i++ {
+		if i < len(cards) {
+			m.selected[cards[i].UUID] = struct{}{}
+		}
+	}
 }
 
 func (m Model) isCardMarkedForCut(uuid string) bool {
