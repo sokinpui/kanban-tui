@@ -40,18 +40,18 @@ func openEditor(path string) tea.Cmd {
 }
 
 type Model struct {
-	board          board.Board
-	focusedColumn  int
-	focusedCard    int
-	mode           mode
-	textInput      textinput.Model
-	width          int
-	height         int
-	selected       map[string]struct{}
-	clipboard      []card.Card
-	isCut          bool
-	scrollOffset   int
-	createCardMode string
+	board           board.Board
+	focusedColumn   int
+	columnCardFocus []int
+	mode            mode
+	textInput       textinput.Model
+	width           int
+	height          int
+	selected        map[string]struct{}
+	clipboard       []card.Card
+	isCut           bool
+	scrollOffset    int
+	createCardMode  string
 }
 
 func NewModel(b board.Board, focusedColumn, focusedCard int) Model {
@@ -59,27 +59,27 @@ func NewModel(b board.Board, focusedColumn, focusedCard int) Model {
 	ti.Prompt = ":"
 
 	m := Model{
-		board:          b,
-		focusedColumn:  focusedColumn,
-		focusedCard:    focusedCard,
-		mode:           normalMode,
-		textInput:      ti,
-		selected:       make(map[string]struct{}),
-		clipboard:      []card.Card{},
-		scrollOffset:   0,
-		createCardMode: "prepend",
+		board:           b,
+		columnCardFocus: make([]int, len(b.Columns)),
+		mode:            normalMode,
+		textInput:       ti,
+		selected:        make(map[string]struct{}),
+		clipboard:       []card.Card{},
+		scrollOffset:    0,
+		createCardMode:  "prepend",
 	}
 
 	if len(m.board.Columns) == 0 {
 		m.focusedColumn = 0
-		m.focusedCard = 0
 	} else {
-		if m.focusedColumn < 0 {
-			m.focusedColumn = 0
+		if focusedColumn < 0 {
+			focusedColumn = 0
 		}
-		if m.focusedColumn >= len(m.board.Columns) {
-			m.focusedColumn = len(m.board.Columns) - 1
+		if focusedColumn >= len(m.board.Columns) {
+			focusedColumn = len(m.board.Columns) - 1
 		}
+		m.focusedColumn = focusedColumn
+		m.columnCardFocus[m.focusedColumn] = focusedCard
 		m.clampFocusedCard()
 	}
 
@@ -91,7 +91,23 @@ func (m Model) FocusedColumn() int {
 }
 
 func (m Model) FocusedCard() int {
-	return m.focusedCard
+	if m.focusedColumn < 0 || m.focusedColumn >= len(m.columnCardFocus) {
+		return 0
+	}
+	return m.columnCardFocus[m.focusedColumn]
+}
+
+func (m *Model) currentFocusedCard() int {
+	if m.focusedColumn < 0 || m.focusedColumn >= len(m.columnCardFocus) {
+		return 0
+	}
+	return m.columnCardFocus[m.focusedColumn]
+}
+
+func (m *Model) setCurrentFocusedCard(focus int) {
+	if m.focusedColumn >= 0 && m.focusedColumn < len(m.columnCardFocus) {
+		m.columnCardFocus[m.focusedColumn] = focus
+	}
 }
 
 func (m *Model) Init() tea.Cmd {
@@ -111,12 +127,13 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err != nil {
 			return m, nil
 		}
-		if m.focusedCard > 0 {
+		currentFocus := m.currentFocusedCard()
+		if currentFocus > 0 {
 			updatedCard, err := fs.LoadCard(msg.path)
 			if err != nil {
 				return m, nil
 			}
-			m.board.Columns[m.focusedColumn].Cards[m.focusedCard-1] = updatedCard
+			m.board.Columns[m.focusedColumn].Cards[currentFocus-1] = updatedCard
 			fs.WriteBoard(m.board)
 		}
 		return m, nil
@@ -186,20 +203,23 @@ func (m *Model) updateNormalMode(msg tea.Msg) tea.Cmd {
 		}
 
 	case "k", "up":
-		if m.focusedCard > 0 {
-			m.focusedCard--
+		currentFocus := m.currentFocusedCard()
+		if currentFocus > 0 {
+			m.setCurrentFocusedCard(currentFocus - 1)
 			m.ensureFocusedCardIsVisible()
 		}
 
 	case "j", "down":
-		if m.focusedCard < len(m.board.Columns[m.focusedColumn].Cards) {
-			m.focusedCard++
+		currentFocus := m.currentFocusedCard()
+		if currentFocus < len(m.board.Columns[m.focusedColumn].Cards) {
+			m.setCurrentFocusedCard(currentFocus + 1)
 			m.ensureFocusedCardIsVisible()
 		}
 
 	case "enter":
-		if m.focusedCard > 0 {
-			cardToEdit := m.board.Columns[m.focusedColumn].Cards[m.focusedCard-1]
+		currentFocus := m.currentFocusedCard()
+		if currentFocus > 0 {
+			cardToEdit := m.board.Columns[m.focusedColumn].Cards[currentFocus-1]
 			return openEditor(cardToEdit.Path)
 		}
 
@@ -216,8 +236,9 @@ func (m *Model) updateNormalMode(msg tea.Msg) tea.Cmd {
 		return m.textInput.Focus()
 
 	case " ":
-		if m.focusedCard > 0 {
-			c := m.board.Columns[m.focusedColumn].Cards[m.focusedCard-1]
+		currentFocus := m.currentFocusedCard()
+		if currentFocus > 0 {
+			c := m.board.Columns[m.focusedColumn].Cards[currentFocus-1]
 			if _, ok := m.selected[c.UUID]; ok {
 				delete(m.selected, c.UUID)
 			} else {
@@ -276,11 +297,12 @@ func (m *Model) updateNormalMode(msg tea.Msg) tea.Cmd {
 		destCol := &m.board.Columns[m.focusedColumn]
 
 		insertIndex := 0
-		if m.focusedCard > 0 {
+		currentFocus := m.currentFocusedCard()
+		if currentFocus > 0 {
 			if keyMsg.String() == "p" {
-				insertIndex = m.focusedCard
+				insertIndex = currentFocus
 			} else {
-				insertIndex = m.focusedCard - 1
+				insertIndex = currentFocus - 1
 			}
 		}
 
@@ -335,8 +357,8 @@ func (m *Model) updateNormalMode(msg tea.Msg) tea.Cmd {
 					}
 				}
 			}
-		} else if m.focusedCard > 0 {
-			cardIndex := m.focusedCard - 1
+		} else if m.currentFocusedCard() > 0 {
+			cardIndex := m.currentFocusedCard() - 1
 			cardsToDelete = append(cardsToDelete, m.board.Columns[m.focusedColumn].Cards[cardIndex])
 		}
 
@@ -424,16 +446,17 @@ func (m *Model) executeCommand() tea.Cmd {
 		}
 
 		insertIndex := 0
+		currentFocus := m.currentFocusedCard()
 		switch m.createCardMode {
 		case "prepend":
 			insertIndex = 0
 		case "before":
-			if m.focusedCard > 0 {
-				insertIndex = m.focusedCard - 1
+			if currentFocus > 0 {
+				insertIndex = currentFocus - 1
 			}
 		case "after":
-			if m.focusedCard > 0 {
-				insertIndex = m.focusedCard
+			if currentFocus > 0 {
+				insertIndex = currentFocus
 			} else {
 				insertIndex = len(currentCol.Cards)
 			}
@@ -449,7 +472,7 @@ func (m *Model) executeCommand() tea.Cmd {
 		if err := fs.WriteBoard(m.board); err != nil {
 			return nil
 		}
-		m.focusedCard = insertIndex + 1
+		m.setCurrentFocusedCard(insertIndex + 1)
 		m.ensureFocusedCardIsVisible()
 	case "sort":
 		sortArgs := strings.Split(args, " ")
@@ -486,7 +509,7 @@ func (m *Model) executeCommand() tea.Cmd {
 		})
 
 		fs.WriteBoard(m.board)
-		m.focusedCard = 0
+		m.setCurrentFocusedCard(0)
 		m.ensureFocusedCardIsVisible()
 	}
 
@@ -495,17 +518,18 @@ func (m *Model) executeCommand() tea.Cmd {
 
 func (m *Model) clampFocusedCard() {
 	if len(m.board.Columns) == 0 {
-		m.focusedCard = 0
 		return
 	}
 	maxIndex := m.board.Columns[m.focusedColumn].CardCount()
 
-	if m.focusedCard < 0 {
-		m.focusedCard = 0
+	currentFocus := m.currentFocusedCard()
+	if currentFocus < 0 {
+		currentFocus = 0
 	}
-	if m.focusedCard > maxIndex {
-		m.focusedCard = maxIndex
+	if currentFocus > maxIndex {
+		currentFocus = maxIndex
 	}
+	m.setCurrentFocusedCard(currentFocus)
 }
 
 func (m Model) isCardMarkedForCut(uuid string) bool {
@@ -575,12 +599,13 @@ func (m *Model) ensureFocusedCardIsVisible() {
 		return
 	}
 
-	if m.focusedCard == 0 {
+	currentFocus := m.currentFocusedCard()
+	if currentFocus == 0 {
 		m.scrollOffset = 0
 		return
 	}
 
-	focusedIdx := m.focusedCard - 1
+	focusedIdx := currentFocus - 1
 
 	if focusedIdx < m.scrollOffset {
 		m.scrollOffset = focusedIdx

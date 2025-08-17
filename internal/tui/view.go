@@ -62,7 +62,7 @@ func renderBoard(m *Model) string {
 
 func renderColumn(c column.Column, m *Model, columnIndex int, width int) string {
 	isColumnFocused := m.focusedColumn == columnIndex
-	isHeaderFocused := isColumnFocused && m.focusedCard == 0
+	isHeaderFocused := isColumnFocused && m.currentFocusedCard() == 0
 
 	header := fmt.Sprintf("%s %d", c.Title, c.CardCount())
 
@@ -109,7 +109,7 @@ func renderColumn(c column.Column, m *Model, columnIndex int, width int) string 
 }
 
 func renderCard(c card.Card, m *Model, columnIndex, cardIndex int, contentWidth int) string {
-	isFocused := m.focusedColumn == columnIndex && m.focusedCard == cardIndex+1
+	isFocused := m.focusedColumn == columnIndex && m.currentFocusedCard() == cardIndex+1
 	_, isSelected := m.selected[c.UUID]
 	isMarkedForCut := m.isCardMarkedForCut(c.UUID)
 
