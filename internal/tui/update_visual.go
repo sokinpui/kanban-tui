@@ -64,6 +64,11 @@ func (m *Model) updateVisualMode(msg tea.Msg) tea.Cmd {
 			m.ensureFocusedCardIsVisible()
 		}
 
+	case ":":
+		m.mode = commandMode
+		m.textInput.SetValue("")
+		return m.textInput.Focus()
+
 	case "y":
 		if len(m.selected) > 0 {
 			m.clipboard = []card.Card{}

@@ -24,6 +24,7 @@ const (
 	DataDirName    = ".kanban"
 	StateFileName  = "state.json"
 	frontMatterSep = "---\n"
+	ArchiveColumnName = "Archived"
 )
 
 type AppState struct {
@@ -49,7 +50,7 @@ func LoadBoard() (board.Board, error) {
 	}
 	defer f.Close()
 
-	cols := make([]column.Column, 0)
+	allCols := make([]column.Column, 0)
 	var currentColumn *column.Column
 
 	scanner := bufio.NewScanner(f)
@@ -57,7 +58,7 @@ func LoadBoard() (board.Board, error) {
 		line := scanner.Text()
 		if strings.HasPrefix(line, "# ") {
 			if currentColumn != nil {
-				cols = append(cols, *currentColumn)
+				allCols = append(allCols, *currentColumn)
 			}
 			title := strings.TrimSpace(strings.TrimPrefix(line, "# "))
 			currentColumn = &column.Column{
@@ -78,26 +79,49 @@ func LoadBoard() (board.Board, error) {
 	}
 
 	if currentColumn != nil {
-		cols = append(cols, *currentColumn)
+		allCols = append(allCols, *currentColumn)
 	}
 
 	if err := scanner.Err(); err != nil {
 		return board.Board{}, err
 	}
 
-	b.Columns = cols
+	displayCols := make([]column.Column, 0)
+	var archivedCol *column.Column
+
+	for i := range allCols {
+		if allCols[i].Title == ArchiveColumnName {
+			archivedCol = &allCols[i]
+		} else {
+			displayCols = append(displayCols, allCols[i])
+		}
+	}
+
+	b.Columns = displayCols
+	if archivedCol != nil {
+		b.Archived = *archivedCol
+	} else {
+		b.Archived = column.New(ArchiveColumnName, filepath.Join(DataDirName, ArchiveColumnName))
+	}
+
 	return b, nil
 }
 
 func WriteBoard(b board.Board) error {
 	var builder strings.Builder
 
-	for i, col := range b.Columns {
+	allColumns := make([]column.Column, len(b.Columns))
+	copy(allColumns, b.Columns)
+	if len(b.Archived.Cards) > 0 {
+		allColumns = append(allColumns, b.Archived)
+	}
+
+	for i, col := range allColumns {
 		builder.WriteString(fmt.Sprintf("# %s\n", col.Title))
 		for _, crd := range col.Cards {
 			builder.WriteString(fmt.Sprintf("- [%s](%s)\n", crd.Title, crd.Path))
 		}
-		if i < len(b.Columns)-1 {
+		if i < len(allColumns)-1 {
 			builder.WriteString("\n")
 		}
 	}

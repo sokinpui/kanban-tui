@@ -2,13 +2,14 @@
 package tui
 
 import (
+	"os"
 	"sort"
 	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"kanban/internal/fs"
 	"kanban/internal/card"
+	"kanban/internal/fs"
 )
 
 func (m *Model) updateCommandMode(msg tea.Msg) tea.Cmd {
@@ -160,6 +161,55 @@ func (m *Model) executeCommand() tea.Cmd {
 			m.focusedColumn = 0
 		}
 		fs.WriteBoard(m.board)
+	case "archive":
+		if len(m.selected) == 0 {
+			return nil
+		}
+
+		if _, err := os.Stat(m.board.Archived.Path); os.IsNotExist(err) {
+			if err := os.MkdirAll(m.board.Archived.Path, 0755); err != nil {
+				// TODO: show error
+				return nil
+			}
+		}
+
+		cardsToArchive := make([]*card.Card, 0)
+		for i := range m.board.Columns {
+			for j := range m.board.Columns[i].Cards {
+				c := &m.board.Columns[i].Cards[j]
+				if _, isSelected := m.selected[c.UUID]; isSelected {
+					cardsToArchive = append(cardsToArchive, c)
+				}
+			}
+		}
+
+		movedCards := make([]card.Card, 0, len(cardsToArchive))
+		for _, c := range cardsToArchive {
+			err := fs.MoveCard(c, m.board.Archived)
+			if err == nil {
+				movedCards = append(movedCards, *c)
+			}
+		}
+		m.board.Archived.Cards = append(m.board.Archived.Cards, movedCards...)
+
+		for i := range m.board.Columns {
+			col := &m.board.Columns[i]
+			keptCards := col.Cards[:0]
+			for _, c := range col.Cards {
+				if _, isSelected := m.selected[c.UUID]; !isSelected {
+					keptCards = append(keptCards, c)
+				}
+			}
+			col.Cards = keptCards
+		}
+
+		fs.WriteBoard(m.board)
+
+		m.selected = make(map[string]struct{})
+		m.clipboard = []card.Card{}
+		m.isCut = false
+		m.visualSelectStart = -1
+		m.clampFocusedCard()
 	}
 
 	return nil
