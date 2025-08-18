@@ -134,6 +134,7 @@ func (m *Model) updateNormalMode(msg tea.Msg) tea.Cmd {
 			return nil
 		}
 
+		m.saveStateForUndo()
 		sort.Slice(m.clipboard, func(i, j int) bool {
 			return m.clipboard[i].CreatedAt.After(m.clipboard[j].CreatedAt)
 		})
@@ -206,9 +207,29 @@ func (m *Model) updateNormalMode(msg tea.Msg) tea.Cmd {
 			cardsToDelete = append(cardsToDelete, m.displayColumns[m.focusedColumn].Cards[cardIndex])
 		}
 
+		m.saveStateForUndo()
 		m.deleteCards(cardsToDelete)
 		m.updateDisplayColumns()
 		m.clampFocusedCard()
+
+	case "u":
+		if newState, ok := m.history.Pop(); ok {
+			m.board = newState
+			m.updateAndResizeFocus()
+			m.statusMessage = "Undo successful"
+			return clearStatusCmd(2 * time.Second)
+		}
+		m.statusMessage = "Nothing to undo"
+		return clearStatusCmd(2 * time.Second)
+
+	case ".":
+		if m.lastCommand != "" {
+			m.statusMessage = "Repeating: " + m.lastCommand
+			m.executeCommand(m.lastCommand)
+			return clearStatusCmd(2 * time.Second)
+		}
+		m.statusMessage = "No command to repeat"
+		return clearStatusCmd(2 * time.Second)
 	}
 	return nil
 }

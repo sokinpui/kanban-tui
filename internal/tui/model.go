@@ -11,6 +11,7 @@ import (
 	"kanban/internal/board"
 	"kanban/internal/card"
 	"kanban/internal/column"
+	"kanban/internal/history"
 	"kanban/internal/fs"
 )
 
@@ -50,6 +51,8 @@ type Model struct {
 	visualSelectStart int
 	doneColumnName    string
 	showHidden        bool
+	history           *history.History
+	lastCommand       string
 	statusMessage     string
 }
 
@@ -68,6 +71,7 @@ func NewModel(b board.Board, state *fs.AppState) Model {
 		visualSelectStart: -1,
 		doneColumnName:    state.DoneColumn,
 		showHidden:        state.ShowHidden,
+		history:           history.New(),
 	}
 	m.updateDisplayColumns()
 
@@ -489,6 +493,10 @@ func (m *Model) clearSelection() {
 	m.isCut = false
 	m.visualSelectStart = -1
 	m.mode = normalMode
+}
+
+func (m *Model) saveStateForUndo() {
+	m.history.Push(m.board)
 }
 
 func (m *Model) updateAndResizeFocus() {

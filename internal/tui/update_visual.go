@@ -106,6 +106,7 @@ func (m *Model) updateVisualMode(msg tea.Msg) tea.Cmd {
 				}
 			}
 		}
+		m.saveStateForUndo()
 		m.deleteCards(cardsToDelete)
 		m.updateDisplayColumns()
 		m.clampFocusedCard()

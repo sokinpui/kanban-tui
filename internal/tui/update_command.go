@@ -27,7 +27,7 @@ func (m *Model) updateCommandMode(msg tea.Msg) tea.Cmd {
 			m.isCut = false
 			return nil
 		case tea.KeyEnter:
-			cmd = m.executeCommand()
+			cmd = m.executeUserCommand()
 			m.mode = normalMode
 			m.textInput.Blur()
 			return cmd
@@ -38,8 +38,14 @@ func (m *Model) updateCommandMode(msg tea.Msg) tea.Cmd {
 	return cmd
 }
 
-func (m *Model) executeCommand() tea.Cmd {
-	parts := strings.SplitN(strings.TrimSpace(m.textInput.Value()), " ", 2)
+func (m *Model) executeUserCommand() tea.Cmd {
+	commandStr := m.textInput.Value()
+	m.lastCommand = commandStr
+	return m.executeCommand(commandStr)
+}
+
+func (m *Model) executeCommand(commandStr string) tea.Cmd {
+	parts := strings.SplitN(strings.TrimSpace(commandStr), " ", 2)
 	command := parts[0]
 
 	var args string
@@ -47,6 +53,7 @@ func (m *Model) executeCommand() tea.Cmd {
 		args = parts[1]
 	}
 
+	m.saveStateForUndo()
 	switch command {
 	case "new":
 		title := args
@@ -203,6 +210,7 @@ func (m *Model) executeCommand() tea.Cmd {
 		m.updateAndResizeFocus()
 		m.clampFocusedCard()
 	case "set":
+		m.history.Pop() // Don't save state changes in history
 		switch args {
 		case "done":
 			if len(m.displayColumns) > 0 {
@@ -219,6 +227,7 @@ func (m *Model) executeCommand() tea.Cmd {
 			return clearStatusCmd(3 * time.Second)
 		}
 	case "unset":
+		m.history.Pop() // Don't save state changes in history
 		if args == "done" {
 			if m.doneColumnName != "" {
 				m.doneColumnName = ""
@@ -254,11 +263,13 @@ func (m *Model) executeCommand() tea.Cmd {
 		m.clearSelection()
 		m.clampFocusedCard()
 	case "show":
+		m.history.Pop() // Don't save view changes in history
 		if args == "hidden" {
 			m.showHidden = true
 			m.updateAndResizeFocus()
 		}
 	case "hide":
+		m.history.Pop() // Don't save view changes in history
 		if args == "hidden" {
 			if m.focusedColumn < len(m.displayColumns) {
 				focusedColTitle := m.displayColumns[m.focusedColumn].Title
@@ -269,6 +280,40 @@ func (m *Model) executeCommand() tea.Cmd {
 			m.showHidden = false
 			m.updateAndResizeFocus()
 		}
+	case "right":
+		if m.focusedColumn >= len(m.board.Columns)-1 {
+			return nil
+		}
+		// Cannot move archive column
+		if m.displayColumns[m.focusedColumn].Title == fs.ArchiveColumnName {
+			return nil
+		}
+
+		i := m.focusedColumn
+		m.board.Columns[i], m.board.Columns[i+1] = m.board.Columns[i+1], m.board.Columns[i]
+		m.focusedColumn++
+		fs.WriteBoard(m.board)
+		m.updateAndResizeFocus()
+		m.statusMessage = "Moved column right"
+		return clearStatusCmd(2 * time.Second)
+	case "left":
+		if m.focusedColumn <= 0 {
+			return nil
+		}
+		// Cannot move archive column
+		if m.displayColumns[m.focusedColumn].Title == fs.ArchiveColumnName {
+			return nil
+		}
+
+		i := m.focusedColumn
+		m.board.Columns[i], m.board.Columns[i-1] = m.board.Columns[i-1], m.board.Columns[i]
+		m.focusedColumn--
+		fs.WriteBoard(m.board)
+		m.updateAndResizeFocus()
+		m.statusMessage = "Moved column left"
+		return clearStatusCmd(2 * time.Second)
+	default:
+		m.history.Pop() // Invalid command, don't save state
 	}
 
 	return nil
