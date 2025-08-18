@@ -155,15 +155,15 @@ func renderCard(c card.Card, m *Model, columnIndex, cardIndex int, contentWidth 
 }
 
 func renderStatusBar(m *Model) string {
-	if m.statusMessage != "" {
-		return statusBarStyle.Copy().Width(m.width).Render(m.statusMessage)
-	}
 	switch m.mode {
 	case commandMode:
 		return m.textInput.View()
 	case visualMode:
 		return statusBarStyle.Copy().Width(m.width).Render("-- VISUAL --")
 	default:
+		if m.statusMessage != "" {
+			return statusBarStyle.Copy().Width(m.width).Render(m.statusMessage)
+		}
 		return ""
 	}
 }
