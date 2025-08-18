@@ -38,7 +38,7 @@ func (m *Model) updateNormalMode(msg tea.Msg) tea.Cmd {
 		}
 
 	case "l", "right":
-		if m.focusedColumn < len(m.board.Columns)-1 {
+		if m.focusedColumn < len(m.displayColumns)-1 {
 			m.focusedColumn++
 			m.clampFocusedCard()
 			m.ensureFocusedCardIsVisible()
@@ -53,14 +53,14 @@ func (m *Model) updateNormalMode(msg tea.Msg) tea.Cmd {
 
 	case "j", "down":
 		currentFocus := m.currentFocusedCard()
-		if currentFocus < len(m.board.Columns[m.focusedColumn].Cards) {
+		if currentFocus < len(m.displayColumns[m.focusedColumn].Cards) {
 			m.setCurrentFocusedCard(currentFocus + 1)
 			m.ensureFocusedCardIsVisible()
 		}
 
 	case "g":
 		if time.Since(m.lastGPress) < 500*time.Millisecond {
-			if len(m.board.Columns[m.focusedColumn].Cards) > 0 {
+			if len(m.displayColumns[m.focusedColumn].Cards) > 0 {
 				m.setCurrentFocusedCard(1)
 				m.ensureFocusedCardIsVisible()
 			}
@@ -70,7 +70,7 @@ func (m *Model) updateNormalMode(msg tea.Msg) tea.Cmd {
 		}
 
 	case "G":
-		numCards := len(m.board.Columns[m.focusedColumn].Cards)
+		numCards := len(m.displayColumns[m.focusedColumn].Cards)
 		if numCards > 0 {
 			m.setCurrentFocusedCard(numCards)
 			m.ensureFocusedCardIsVisible()
@@ -79,7 +79,7 @@ func (m *Model) updateNormalMode(msg tea.Msg) tea.Cmd {
 	case "enter":
 		currentFocus := m.currentFocusedCard()
 		if currentFocus > 0 {
-			cardToEdit := m.board.Columns[m.focusedColumn].Cards[currentFocus-1]
+			cardToEdit := m.displayColumns[m.focusedColumn].Cards[currentFocus-1]
 			return openEditor(cardToEdit.Path)
 		}
 
@@ -107,7 +107,7 @@ func (m *Model) updateNormalMode(msg tea.Msg) tea.Cmd {
 		if time.Since(m.lastYPress) < 500*time.Millisecond { // yy
 			currentFocus := m.currentFocusedCard()
 			if currentFocus > 0 {
-				m.clipboard = []card.Card{m.board.Columns[m.focusedColumn].Cards[currentFocus-1]}
+				m.clipboard = []card.Card{m.displayColumns[m.focusedColumn].Cards[currentFocus-1]}
 				m.isCut = false
 				m.selected = make(map[string]struct{})
 			}
@@ -120,7 +120,7 @@ func (m *Model) updateNormalMode(msg tea.Msg) tea.Cmd {
 		if time.Since(m.lastDPress) < 500*time.Millisecond { // dd
 			currentFocus := m.currentFocusedCard()
 			if currentFocus > 0 {
-				m.clipboard = []card.Card{m.board.Columns[m.focusedColumn].Cards[currentFocus-1]}
+				m.clipboard = []card.Card{m.displayColumns[m.focusedColumn].Cards[currentFocus-1]}
 				m.isCut = true
 				m.selected = make(map[string]struct{})
 			}
@@ -138,7 +138,7 @@ func (m *Model) updateNormalMode(msg tea.Msg) tea.Cmd {
 			return m.clipboard[i].CreatedAt.After(m.clipboard[j].CreatedAt)
 		})
 
-		destCol := &m.board.Columns[m.focusedColumn]
+		destCol := m.displayColumns[m.focusedColumn]
 
 		insertIndex := 0
 		currentFocus := m.currentFocusedCard()
@@ -203,10 +203,12 @@ func (m *Model) updateNormalMode(msg tea.Msg) tea.Cmd {
 			}
 		} else if m.currentFocusedCard() > 0 {
 			cardIndex := m.currentFocusedCard() - 1
-			cardsToDelete = append(cardsToDelete, m.board.Columns[m.focusedColumn].Cards[cardIndex])
+			cardsToDelete = append(cardsToDelete, m.displayColumns[m.focusedColumn].Cards[cardIndex])
 		}
 
 		m.deleteCards(cardsToDelete)
+		m.updateDisplayColumns()
+		m.clampFocusedCard()
 	}
 	return nil
 }

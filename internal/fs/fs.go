@@ -30,6 +30,8 @@ const (
 type AppState struct {
 	FocusedColumn int `json:"focused_column"`
 	FocusedCard   int `json:"focused_card"`
+	DoneColumn    string `json:"done_column,omitempty"`
+	ShowHidden    bool   `json:"show_hidden,omitempty"`
 }
 
 var cardLinkRegex = regexp.MustCompile(`\s*-\s*\[(.*?)\]\((.*?)\)`)
@@ -262,10 +264,12 @@ func statePath() string {
 	return filepath.Join(DataDirName, StateFileName)
 }
 
-func SaveState(focusedColumn, focusedCard int) error {
+func SaveState(focusedColumn, focusedCard int, doneColumn string, showHidden bool) error {
 	state := AppState{
 		FocusedColumn: focusedColumn,
 		FocusedCard:   focusedCard,
+		DoneColumn:    doneColumn,
+		ShowHidden:    showHidden,
 	}
 	data, err := json.MarshalIndent(state, "", "  ")
 	if err != nil {

@@ -50,11 +50,11 @@ var (
 )
 
 func renderBoard(m *Model, height int) string {
-	if m.width <= 0 || len(m.board.Columns) == 0 || height <= 0 {
+	if m.width <= 0 || len(m.displayColumns) == 0 || height <= 0 {
 		return ""
 	}
 
-	numColumns := len(m.board.Columns)
+	numColumns := len(m.displayColumns)
 	separator := "│"
 	numSeparators := numColumns - 1
 	if numSeparators < 0 {
@@ -66,12 +66,12 @@ func renderBoard(m *Model, height int) string {
 	remainder := availableWidth % numColumns
 
 	var renderedColumns []string
-	for i, col := range m.board.Columns {
+	for i, col := range m.displayColumns {
 		colWidth := baseColumnWidth
 		if i < remainder {
 			colWidth++
 		}
-		renderedColumns = append(renderedColumns, renderColumn(col, m, i, colWidth, height))
+		renderedColumns = append(renderedColumns, renderColumn(*col, m, i, colWidth, height))
 	}
 
 	var parts []string
@@ -155,6 +155,9 @@ func renderCard(c card.Card, m *Model, columnIndex, cardIndex int, contentWidth 
 }
 
 func renderStatusBar(m *Model) string {
+	if m.statusMessage != "" {
+		return statusBarStyle.Copy().Width(m.width).Render(m.statusMessage)
+	}
 	switch m.mode {
 	case commandMode:
 		return m.textInput.View()

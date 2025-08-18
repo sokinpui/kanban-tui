@@ -50,7 +50,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "could not load state: %v\n", err)
 	}
 
-	model := tui.NewModel(board, state.FocusedColumn, state.FocusedCard)
+	model := tui.NewModel(board, &state)
 	p := tea.NewProgram(&model, tea.WithAltScreen())
 	finalModel, err := p.Run()
 	if err != nil {
@@ -59,7 +59,8 @@ func main() {
 	}
 
 	if m, ok := finalModel.(*tui.Model); ok {
-		if err := fs.SaveState(m.FocusedColumn(), m.FocusedCard()); err != nil {
+		s := m.State()
+		if err := fs.SaveState(s.FocusedColumn, s.FocusedCard, s.DoneColumn, s.ShowHidden); err != nil {
 			fmt.Fprintf(os.Stderr, "could not save state: %v\n", err)
 			os.Exit(1)
 		}

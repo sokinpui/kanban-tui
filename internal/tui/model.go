@@ -10,8 +10,17 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"kanban/internal/board"
 	"kanban/internal/card"
+	"kanban/internal/column"
 	"kanban/internal/fs"
 )
+
+type clearStatusMsg struct{}
+
+func clearStatusCmd(d time.Duration) tea.Cmd {
+	return tea.Tick(d, func(t time.Time) tea.Msg {
+		return clearStatusMsg{}
+	})
+}
 
 type mode int
 
@@ -23,6 +32,7 @@ const (
 
 type Model struct {
 	board             board.Board
+	displayColumns    []*column.Column
 	focusedColumn     int
 	columnCardFocus   []int
 	mode              mode
@@ -38,15 +48,17 @@ type Model struct {
 	lastYPress        time.Time
 	lastDPress        time.Time
 	visualSelectStart int
+	doneColumnName    string
+	showHidden        bool
+	statusMessage     string
 }
 
-func NewModel(b board.Board, focusedColumn, focusedCard int) Model {
+func NewModel(b board.Board, state *fs.AppState) Model {
 	ti := textinput.New()
 	ti.Prompt = ":"
 
 	m := Model{
 		board:             b,
-		columnCardFocus:   make([]int, len(b.Columns)),
 		mode:              normalMode,
 		textInput:         ti,
 		selected:          make(map[string]struct{}),
@@ -54,23 +66,49 @@ func NewModel(b board.Board, focusedColumn, focusedCard int) Model {
 		scrollOffset:      0,
 		createCardMode:    "prepend",
 		visualSelectStart: -1,
+		doneColumnName:    state.DoneColumn,
+		showHidden:        state.ShowHidden,
 	}
+	m.updateDisplayColumns()
 
-	if len(m.board.Columns) == 0 {
+	m.columnCardFocus = make([]int, len(m.displayColumns))
+
+	if len(m.displayColumns) == 0 {
 		m.focusedColumn = 0
 	} else {
+		focusedColumn := state.FocusedColumn
 		if focusedColumn < 0 {
 			focusedColumn = 0
 		}
-		if focusedColumn >= len(m.board.Columns) {
-			focusedColumn = len(m.board.Columns) - 1
+		if focusedColumn >= len(m.displayColumns) {
+			focusedColumn = len(m.displayColumns) - 1
 		}
 		m.focusedColumn = focusedColumn
-		m.columnCardFocus[m.focusedColumn] = focusedCard
+		m.columnCardFocus[m.focusedColumn] = state.FocusedCard
 		m.clampFocusedCard()
 	}
 
 	return m
+}
+
+func (m *Model) updateDisplayColumns() {
+	m.displayColumns = make([]*column.Column, len(m.board.Columns))
+	for i := range m.board.Columns {
+		m.displayColumns[i] = &m.board.Columns[i]
+	}
+
+	if m.showHidden && m.board.Archived.CardCount() > 0 {
+		m.displayColumns = append(m.displayColumns, &m.board.Archived)
+	}
+}
+
+func (m Model) State() fs.AppState {
+	return fs.AppState{
+		FocusedColumn: m.FocusedColumn(),
+		FocusedCard:   m.FocusedCard(),
+		DoneColumn:    m.doneColumnName,
+		ShowHidden:    m.showHidden,
+	}
 }
 
 func (m Model) FocusedColumn() int {
@@ -110,6 +148,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.ensureFocusedCardIsVisible()
 		return m, nil
 
+	case clearStatusMsg:
+		m.statusMessage = ""
+		return m, nil
+
 	case editorFinishedMsg:
 		if msg.err != nil {
 			return m, nil
@@ -120,7 +162,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if err != nil {
 				return m, nil
 			}
-			m.board.Columns[m.focusedColumn].Cards[currentFocus-1] = updatedCard
+			m.displayColumns[m.focusedColumn].Cards[currentFocus-1] = updatedCard
 			fs.WriteBoard(m.board)
 		}
 		return m, nil
@@ -194,10 +236,10 @@ func (m *Model) deleteCards(cardsToDelete []card.Card) {
 }
 
 func (m *Model) clampFocusedCard() {
-	if len(m.board.Columns) == 0 {
+	if len(m.displayColumns) == 0 {
 		return
 	}
-	maxIndex := m.board.Columns[m.focusedColumn].CardCount()
+	maxIndex := m.displayColumns[m.focusedColumn].CardCount()
 
 	currentFocus := m.currentFocusedCard()
 	if currentFocus < 0 {
@@ -233,10 +275,10 @@ func (m *Model) cardContentWidth(columnWidth int) int {
 }
 
 func (m *Model) getFocusedColumnWidth() int {
-	if m.width == 0 || len(m.board.Columns) == 0 {
+	if m.width == 0 || len(m.displayColumns) == 0 {
 		return 0
 	}
-	numColumns := len(m.board.Columns)
+	numColumns := len(m.displayColumns)
 	numSeparators := numColumns - 1
 	if numSeparators < 0 {
 		numSeparators = 0
@@ -269,10 +311,10 @@ func (m *Model) getCardRenderHeight(c card.Card) int {
 }
 
 func (m *Model) getColumnHeaderHeight() int {
-	if m.width == 0 || len(m.board.Columns) == 0 || m.focusedColumn >= len(m.board.Columns) {
+	if m.width == 0 || len(m.displayColumns) == 0 || m.focusedColumn >= len(m.displayColumns) {
 		return 1
 	}
-	col := m.board.Columns[m.focusedColumn]
+	col := m.displayColumns[m.focusedColumn]
 	isHeaderFocused := m.currentFocusedCard() == 0
 
 	header := fmt.Sprintf("%s %d", col.Title, col.CardCount())
@@ -296,7 +338,7 @@ func (m *Model) getColumnHeaderHeight() int {
 }
 
 func (m *Model) ensureFocusedCardIsVisible() {
-	if m.height == 0 || len(m.board.Columns) == 0 || m.focusedColumn >= len(m.board.Columns) {
+	if m.height == 0 || len(m.displayColumns) == 0 || m.focusedColumn >= len(m.displayColumns) {
 		return
 	}
 	currentFocus := m.currentFocusedCard()
@@ -319,7 +361,7 @@ func (m *Model) ensureFocusedCardIsVisible() {
 	if cardAreaH < 0 {
 		cardAreaH = 0
 	}
-	cards := m.board.Columns[m.focusedColumn].Cards
+	cards := m.displayColumns[m.focusedColumn].Cards
 
 	currentHeight := 0
 	lastVisibleIdx := -1
@@ -368,4 +410,99 @@ func (m *Model) ensureFocusedCardIsVisible() {
 		}
 		m.scrollOffset = newOffset
 	}
+}
+
+func (m *Model) getSelectedOrFocusedCards() []*card.Card {
+	cardsToMove := make([]*card.Card, 0)
+	if len(m.selected) > 0 {
+		for i := range m.board.Columns {
+			for j := range m.board.Columns[i].Cards {
+				c := &m.board.Columns[i].Cards[j]
+				if _, isSelected := m.selected[c.UUID]; isSelected {
+					cardsToMove = append(cardsToMove, c)
+				}
+			}
+		}
+		if m.showHidden {
+			for j := range m.board.Archived.Cards {
+				c := &m.board.Archived.Cards[j]
+				if _, isSelected := m.selected[c.UUID]; isSelected {
+					cardsToMove = append(cardsToMove, c)
+				}
+			}
+		}
+	} else if m.currentFocusedCard() > 0 {
+		cardIndex := m.currentFocusedCard() - 1
+		focusedCol := m.displayColumns[m.focusedColumn]
+		if cardIndex < len(focusedCol.Cards) {
+			cardsToMove = append(cardsToMove, &focusedCol.Cards[cardIndex])
+		}
+	}
+	return cardsToMove
+}
+
+func (m *Model) moveCards(cardsToMove []*card.Card, destCol *column.Column) {
+	if len(cardsToMove) == 0 {
+		return
+	}
+
+	successfullyMovedCards := make([]card.Card, 0, len(cardsToMove))
+	movedUUIDs := make(map[string]struct{})
+	for _, c := range cardsToMove {
+		err := fs.MoveCard(c, *destCol)
+		if err == nil {
+			successfullyMovedCards = append(successfullyMovedCards, *c)
+			movedUUIDs[c.UUID] = struct{}{}
+		}
+	}
+
+	if len(successfullyMovedCards) == 0 {
+		return
+	}
+
+	// Remove from ALL source columns by creating new slices.
+	for i := range m.board.Columns {
+		col := &m.board.Columns[i]
+		keptCards := make([]card.Card, 0, len(col.Cards))
+		for _, c := range col.Cards {
+			if _, wasMoved := movedUUIDs[c.UUID]; !wasMoved {
+				keptCards = append(keptCards, c)
+			}
+		}
+		col.Cards = keptCards
+	}
+
+	keptArchived := make([]card.Card, 0, len(m.board.Archived.Cards))
+	for _, c := range m.board.Archived.Cards {
+		if _, wasMoved := movedUUIDs[c.UUID]; !wasMoved {
+			keptArchived = append(keptArchived, c)
+		}
+	}
+	m.board.Archived.Cards = keptArchived
+
+	destCol.Cards = append(destCol.Cards, successfullyMovedCards...)
+}
+
+func (m *Model) clearSelection() {
+	m.selected = make(map[string]struct{})
+	m.clipboard = []card.Card{}
+	m.isCut = false
+	m.visualSelectStart = -1
+	m.mode = normalMode
+}
+
+func (m *Model) updateAndResizeFocus() {
+	m.updateDisplayColumns()
+
+	newFocus := make([]int, len(m.displayColumns))
+	copy(newFocus, m.columnCardFocus)
+	m.columnCardFocus = newFocus
+
+	if m.focusedColumn >= len(m.displayColumns) {
+		m.focusedColumn = len(m.displayColumns) - 1
+		if m.focusedColumn < 0 {
+			m.focusedColumn = 0
+		}
+	}
+	m.clampFocusedCard()
 }

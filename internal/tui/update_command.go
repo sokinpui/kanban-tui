@@ -9,6 +9,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"kanban/internal/card"
+	"kanban/internal/column"
 	"kanban/internal/fs"
 )
 
@@ -49,7 +50,7 @@ func (m *Model) executeCommand() tea.Cmd {
 	switch command {
 	case "new":
 		title := args
-		currentCol := &m.board.Columns[m.focusedColumn]
+		currentCol := m.displayColumns[m.focusedColumn]
 
 		newCard, err := fs.CreateCard(*currentCol, title)
 		if err != nil {
@@ -92,7 +93,7 @@ func (m *Model) executeCommand() tea.Cmd {
 		}
 		field, direction := sortArgs[0], sortArgs[1]
 
-		currentCol := &m.board.Columns[m.focusedColumn]
+		currentCol := m.displayColumns[m.focusedColumn]
 		if len(currentCol.Cards) < 2 {
 			return nil
 		}
@@ -133,12 +134,12 @@ func (m *Model) executeCommand() tea.Cmd {
 			return nil
 		}
 		m.board.Columns = append(m.board.Columns, newCol)
-		m.columnCardFocus = append(m.columnCardFocus, 0)
+		m.updateAndResizeFocus()
 		fs.WriteBoard(m.board)
-		m.focusedColumn = len(m.board.Columns) - 1
+		m.focusedColumn = len(m.displayColumns) - 1
 
 	case "delete":
-		if m.currentFocusedCard() != 0 || len(m.board.Columns) == 0 {
+		if m.currentFocusedCard() != 0 || len(m.displayColumns) == 0 {
 			return nil
 		}
 
@@ -148,18 +149,20 @@ func (m *Model) executeCommand() tea.Cmd {
 			return nil
 		}
 
-		// Remove column from board
-		m.board.Columns = append(m.board.Columns[:m.focusedColumn], m.board.Columns[m.focusedColumn+1:]...)
-		// Remove focus state for that column
-		m.columnCardFocus = append(m.columnCardFocus[:m.focusedColumn], m.columnCardFocus[m.focusedColumn+1:]...)
+		if colToDelete.Title != fs.ArchiveColumnName {
+			var newCols []column.Column
+			for _, c := range m.board.Columns {
+				if c.Title != colToDelete.Title {
+					newCols = append(newCols, c)
+				}
+			}
+			m.board.Columns = newCols
+		} else {
+			// It's the archive column, just clear it
+			m.board.Archived.Cards = []card.Card{}
+		}
 
-		// Adjust focus
-		if m.focusedColumn >= len(m.board.Columns) {
-			m.focusedColumn = len(m.board.Columns) - 1
-		}
-		if m.focusedColumn < 0 {
-			m.focusedColumn = 0
-		}
+		m.updateAndResizeFocus()
 		fs.WriteBoard(m.board)
 	case "archive":
 		if len(m.selected) == 0 {
@@ -173,16 +176,7 @@ func (m *Model) executeCommand() tea.Cmd {
 			}
 		}
 
-		cardsToArchive := make([]*card.Card, 0)
-		for i := range m.board.Columns {
-			for j := range m.board.Columns[i].Cards {
-				c := &m.board.Columns[i].Cards[j]
-				if _, isSelected := m.selected[c.UUID]; isSelected {
-					cardsToArchive = append(cardsToArchive, c)
-				}
-			}
-		}
-
+		cardsToArchive := m.getSelectedOrFocusedCards()
 		movedCards := make([]card.Card, 0, len(cardsToArchive))
 		for _, c := range cardsToArchive {
 			err := fs.MoveCard(c, m.board.Archived)
@@ -205,11 +199,76 @@ func (m *Model) executeCommand() tea.Cmd {
 
 		fs.WriteBoard(m.board)
 
-		m.selected = make(map[string]struct{})
-		m.clipboard = []card.Card{}
-		m.isCut = false
-		m.visualSelectStart = -1
+		m.clearSelection()
+		m.updateAndResizeFocus()
 		m.clampFocusedCard()
+	case "set":
+		switch args {
+		case "done":
+			if len(m.displayColumns) > 0 {
+				m.doneColumnName = m.displayColumns[m.focusedColumn].Title
+				m.statusMessage = "Set done column to: " + m.doneColumnName
+				return clearStatusCmd(3 * time.Second)
+			}
+		case "done?":
+			if m.doneColumnName != "" {
+				m.statusMessage = "Done column is: " + m.doneColumnName
+			} else {
+				m.statusMessage = "Done column is not set. Use `:set done`."
+			}
+			return clearStatusCmd(3 * time.Second)
+		}
+	case "unset":
+		if args == "done" {
+			if m.doneColumnName != "" {
+				m.doneColumnName = ""
+				m.statusMessage = "Done column has been unset."
+			} else {
+				m.statusMessage = "Done column was not set."
+			}
+			return clearStatusCmd(3 * time.Second)
+		}
+	case "done":
+		if m.doneColumnName == "" {
+			return nil
+		}
+
+		var destCol *column.Column
+		for i := range m.board.Columns {
+			if m.board.Columns[i].Title == m.doneColumnName {
+				destCol = &m.board.Columns[i]
+				break
+			}
+		}
+		if destCol == nil {
+			return nil
+		}
+
+		cardsToMove := m.getSelectedOrFocusedCards()
+		if len(cardsToMove) == 0 {
+			return nil
+		}
+
+		m.moveCards(cardsToMove, destCol)
+		fs.WriteBoard(m.board)
+		m.clearSelection()
+		m.clampFocusedCard()
+	case "show":
+		if args == "hidden" {
+			m.showHidden = true
+			m.updateAndResizeFocus()
+		}
+	case "hide":
+		if args == "hidden" {
+			if m.focusedColumn < len(m.displayColumns) {
+				focusedColTitle := m.displayColumns[m.focusedColumn].Title
+				if focusedColTitle == fs.ArchiveColumnName {
+					m.focusedColumn = 0
+				}
+			}
+			m.showHidden = false
+			m.updateAndResizeFocus()
+		}
 	}
 
 	return nil

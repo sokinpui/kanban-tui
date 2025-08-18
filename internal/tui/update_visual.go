@@ -30,7 +30,7 @@ func (m *Model) updateVisualMode(msg tea.Msg) tea.Cmd {
 
 	case "j", "down":
 		currentFocus := m.currentFocusedCard()
-		if currentFocus < len(m.board.Columns[m.focusedColumn].Cards) {
+		if currentFocus < len(m.displayColumns[m.focusedColumn].Cards) {
 			m.setCurrentFocusedCard(currentFocus + 1)
 			m.updateVisualSelection()
 			m.ensureFocusedCardIsVisible()
@@ -46,7 +46,7 @@ func (m *Model) updateVisualMode(msg tea.Msg) tea.Cmd {
 
 	case "g":
 		if time.Since(m.lastGPress) < 500*time.Millisecond {
-			if len(m.board.Columns[m.focusedColumn].Cards) > 0 {
+			if len(m.displayColumns[m.focusedColumn].Cards) > 0 {
 				m.setCurrentFocusedCard(1)
 				m.updateVisualSelection()
 				m.ensureFocusedCardIsVisible()
@@ -57,7 +57,7 @@ func (m *Model) updateVisualMode(msg tea.Msg) tea.Cmd {
 		}
 
 	case "G":
-		numCards := len(m.board.Columns[m.focusedColumn].Cards)
+		numCards := len(m.displayColumns[m.focusedColumn].Cards)
 		if numCards > 0 {
 			m.setCurrentFocusedCard(numCards)
 			m.updateVisualSelection()
@@ -73,7 +73,7 @@ func (m *Model) updateVisualMode(msg tea.Msg) tea.Cmd {
 		if len(m.selected) > 0 {
 			m.clipboard = []card.Card{}
 			m.isCut = false
-			for _, c := range m.board.Columns[m.focusedColumn].Cards {
+			for _, c := range m.displayColumns[m.focusedColumn].Cards {
 				if _, ok := m.selected[c.UUID]; ok {
 					m.clipboard = append(m.clipboard, c)
 				}
@@ -87,7 +87,7 @@ func (m *Model) updateVisualMode(msg tea.Msg) tea.Cmd {
 		if len(m.selected) > 0 {
 			m.clipboard = []card.Card{}
 			m.isCut = true
-			for _, c := range m.board.Columns[m.focusedColumn].Cards {
+			for _, c := range m.displayColumns[m.focusedColumn].Cards {
 				if _, ok := m.selected[c.UUID]; ok {
 					m.clipboard = append(m.clipboard, c)
 				}
@@ -100,13 +100,15 @@ func (m *Model) updateVisualMode(msg tea.Msg) tea.Cmd {
 	case "delete":
 		var cardsToDelete []card.Card
 		if len(m.selected) > 0 {
-			for _, c := range m.board.Columns[m.focusedColumn].Cards {
+			for _, c := range m.displayColumns[m.focusedColumn].Cards {
 				if _, isSelected := m.selected[c.UUID]; isSelected {
 					cardsToDelete = append(cardsToDelete, c)
 				}
 			}
 		}
 		m.deleteCards(cardsToDelete)
+		m.updateDisplayColumns()
+		m.clampFocusedCard()
 		m.mode = normalMode
 		m.visualSelectStart = -1
 	}
@@ -129,7 +131,7 @@ func (m *Model) updateVisualSelection() {
 		start, end = end, start
 	}
 
-	cards := m.board.Columns[m.focusedColumn].Cards
+	cards := m.displayColumns[m.focusedColumn].Cards
 	for i := start; i <= end; i++ {
 		if i < len(cards) {
 			m.selected[cards[i].UUID] = struct{}{}
