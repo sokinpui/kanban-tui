@@ -167,7 +167,7 @@ func (m *Model) executeCommand(commandStr string) tea.Cmd {
 		m.setCurrentFocusedCard(insertIndex + 1)
 		m.ensureFocusedCardIsVisible()
 	case "sort":
-		sortArgs := strings.Split(args, " ")
+		sortArgs := strings.Fields(args)
 		if len(sortArgs) != 2 {
 			return nil
 		}
@@ -283,7 +283,7 @@ func (m *Model) executeCommand(commandStr string) tea.Cmd {
 		m.updateAndResizeFocus()
 		m.clampFocusedCard()
 	case "set":
-		m.history.Pop() // Don't save state changes in history
+		m.history.Drop() // Don't save state changes in history
 		switch args {
 		case "done":
 			if len(m.displayColumns) > 0 {
@@ -300,7 +300,7 @@ func (m *Model) executeCommand(commandStr string) tea.Cmd {
 			return clearStatusCmd(3 * time.Second)
 		}
 	case "unset":
-		m.history.Pop() // Don't save state changes in history
+		m.history.Drop() // Don't save state changes in history
 		if args == "done" {
 			if m.doneColumnName != "" {
 				m.doneColumnName = ""
@@ -336,13 +336,13 @@ func (m *Model) executeCommand(commandStr string) tea.Cmd {
 		m.clearSelection()
 		m.clampFocusedCard()
 	case "show":
-		m.history.Pop() // Don't save view changes in history
+		m.history.Drop() // Don't save view changes in history
 		if args == "hidden" {
 			m.showHidden = true
 			m.updateAndResizeFocus()
 		}
 	case "hide":
-		m.history.Pop() // Don't save view changes in history
+		m.history.Drop() // Don't save view changes in history
 		if args == "hidden" {
 			if m.focusedColumn < len(m.displayColumns) {
 				focusedColTitle := m.displayColumns[m.focusedColumn].Title
@@ -386,7 +386,7 @@ func (m *Model) executeCommand(commandStr string) tea.Cmd {
 		m.statusMessage = "Moved column left"
 		return clearStatusCmd(2 * time.Second)
 	default:
-		m.history.Pop() // Invalid command, don't save state
+		m.history.Drop() // Invalid command, don't save state
 	}
 
 	return nil

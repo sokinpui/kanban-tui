@@ -213,13 +213,23 @@ func (m *Model) updateNormalMode(msg tea.Msg) tea.Cmd {
 		m.clampFocusedCard()
 
 	case "u":
-		if newState, ok := m.history.Pop(); ok {
+		if newState, ok := m.history.Undo(m.board); ok {
 			m.board = newState
 			m.updateAndResizeFocus()
 			m.statusMessage = "Undo successful"
 			return clearStatusCmd(2 * time.Second)
 		}
 		m.statusMessage = "Nothing to undo"
+		return clearStatusCmd(2 * time.Second)
+
+	case "ctrl+r":
+		if newState, ok := m.history.Redo(m.board); ok {
+			m.board = newState
+			m.updateAndResizeFocus()
+			m.statusMessage = "Redo successful"
+			return clearStatusCmd(2 * time.Second)
+		}
+		m.statusMessage = "Nothing to redo"
 		return clearStatusCmd(2 * time.Second)
 
 	case ".":
