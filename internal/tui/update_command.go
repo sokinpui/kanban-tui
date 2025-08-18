@@ -31,11 +31,84 @@ func (m *Model) updateCommandMode(msg tea.Msg) tea.Cmd {
 			m.mode = normalMode
 			m.textInput.Blur()
 			return cmd
+		case tea.KeyTab:
+			m.handleCompletion()
+			return nil
+		}
+	}
+	m.textInput, cmd = m.textInput.Update(msg)
+	return cmd
+}
+
+func (m *Model) handleCompletion() {
+	inputValue := m.textInput.Value()
+	parts := strings.Split(inputValue, " ")
+
+	if len(parts) == 0 {
+		return
+	}
+
+	var candidates []string
+	wordToComplete := parts[len(parts)-1]
+	isCompletingArgument := len(parts) > 1 || (len(parts) == 1 && strings.HasSuffix(inputValue, " "))
+
+	if !isCompletingArgument {
+		candidates = []string{
+			"archive", "create", "delete", "done", "hide", "left",
+			"new", "right", "set", "show", "sort", "unset",
+		}
+	} else {
+		// If the last char is a space, we are completing the *next* word.
+		if strings.HasSuffix(inputValue, " ") {
+			wordToComplete = ""
+			parts = append(parts, "")
+		}
+
+		command := parts[0]
+		switch command {
+		case "sort":
+			if len(parts) == 2 {
+				candidates = []string{"create", "modify"}
+			} else if len(parts) == 3 {
+				candidates = []string{"asc", "desc"}
+			}
+		case "set":
+			candidates = []string{"done", "done?"}
+		case "unset":
+			candidates = []string{"done"}
+		case "show", "hide":
+			candidates = []string{"hidden"}
 		}
 	}
 
-	m.textInput, cmd = m.textInput.Update(msg)
-	return cmd
+	if len(candidates) == 0 {
+		return
+	}
+
+	var matches []string
+	for _, c := range candidates {
+		if strings.HasPrefix(c, wordToComplete) {
+			matches = append(matches, c)
+		}
+	}
+
+	if len(matches) == 0 {
+		return
+	}
+
+	nextMatch := matches[0]
+	for i, match := range matches {
+		if match == wordToComplete {
+			nextMatch = matches[(i+1)%len(matches)]
+			break
+		}
+	}
+
+	prefixParts := parts[:len(parts)-1]
+	newValue := strings.Join(append(prefixParts, nextMatch), " ")
+
+	m.textInput.SetValue(newValue)
+	m.textInput.SetCursor(len(newValue))
 }
 
 func (m *Model) executeUserCommand() tea.Cmd {
