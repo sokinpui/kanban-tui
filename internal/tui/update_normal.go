@@ -155,7 +155,6 @@ func (m *Model) updateNormalMode(msg tea.Msg) tea.Cmd {
 			insertIndex = len(destCol.Cards)
 		}
 
-		var cardsToInsert []card.Card
 		if m.isCut {
 			clipboardUUIDs := make(map[string]struct{}, len(m.clipboard))
 			for i := range m.clipboard {
@@ -164,17 +163,50 @@ func (m *Model) updateNormalMode(msg tea.Msg) tea.Cmd {
 				fs.MoveCard(c, *destCol)
 			}
 
+			// Rebuild destination column's cards
+			newDestCards := make([]card.Card, 0, len(destCol.Cards)+len(m.clipboard))
+			for j := 0; j < insertIndex; j++ {
+				c := destCol.Cards[j]
+				if _, isCut := clipboardUUIDs[c.UUID]; !isCut {
+					newDestCards = append(newDestCards, c)
+				}
+			}
+			newDestCards = append(newDestCards, m.clipboard...)
+			for j := insertIndex; j < len(destCol.Cards); j++ {
+				c := destCol.Cards[j]
+				if _, isCut := clipboardUUIDs[c.UUID]; !isCut {
+					newDestCards = append(newDestCards, c)
+				}
+			}
+
+			// Remove cards from all columns, applying the new slice to destCol
 			for i := range m.board.Columns {
 				col := &m.board.Columns[i]
-				keptCards := col.Cards[:0]
-				for _, c := range col.Cards {
+				if col.Title == destCol.Title {
+					col.Cards = newDestCards
+				} else {
+					keptCards := make([]card.Card, 0, len(col.Cards))
+					for _, c := range col.Cards {
+						if _, found := clipboardUUIDs[c.UUID]; !found {
+							keptCards = append(keptCards, c)
+						}
+					}
+					col.Cards = keptCards
+				}
+			}
+
+			// Handle archived column
+			if m.board.Archived.Title == destCol.Title {
+				m.board.Archived.Cards = newDestCards
+			} else {
+				keptCards := make([]card.Card, 0, len(m.board.Archived.Cards))
+				for _, c := range m.board.Archived.Cards {
 					if _, found := clipboardUUIDs[c.UUID]; !found {
 						keptCards = append(keptCards, c)
 					}
 				}
-				col.Cards = keptCards
+				m.board.Archived.Cards = keptCards
 			}
-			cardsToInsert = m.clipboard
 		} else {
 			var newCards []card.Card
 			for _, c := range m.clipboard {
@@ -183,13 +215,9 @@ func (m *Model) updateNormalMode(msg tea.Msg) tea.Cmd {
 					newCards = append(newCards, newCard)
 				}
 			}
-			cardsToInsert = newCards
-		}
-		if len(cardsToInsert) > 0 {
-			destCol.Cards = append(destCol.Cards[:insertIndex], append(cardsToInsert, destCol.Cards[insertIndex:]...)...)
-			fs.WriteBoard(m.board)
-			m.clipboard = []card.Card{}
-			m.isCut = false
+			if len(newCards) > 0 {
+				destCol.Cards = append(destCol.Cards[:insertIndex], append(newCards, destCol.Cards[insertIndex:]...)...)
+			}
 		}
 
 	case "delete":
