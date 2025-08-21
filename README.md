@@ -1,18 +1,21 @@
 # kanban
 
-A terminal-based Kanban board application.
+A terminal-based Kanban board application with a focus on a fast, Vim-like workflow.
 
 ## Features
 
-- Vim-like keybindings
+- Modern, informative status bar with mode indicators and progress
+- Vim-like keybindings for all major operations
+- Fuzzy finder for quick card navigation (`fzf`-like)
+- Forward and backward search for cards (`/`, `?`)
 - Markdown-based board definition
 - Cards as individual markdown files with YAML front matter
 - Visual mode for multi-card operations
 - Command mode with tab completion for extended functionality
-- Undo functionality and command repetition
+- Undo/redo functionality and command repetition
 - Card archiving and a toggleable archive view
 - Configurable "Done" column for quick card movement
-- Column reordering
+- Column creation, deletion, renaming, and reordering
 - Safe deletion via `trash-cli`
 
 ## Dependencies
@@ -76,6 +79,10 @@ The application operates on a simple file-based structure.
 | `j`, `down`  | Focus card below                    |
 | `gg`         | Focus first card in column          |
 | `G`          | Focus last card in column           |
+| `/`          | Enter forward search mode           |
+| `?`          | Enter backward search mode          |
+| `n`          | Find next search result             |
+| `N`          | Find previous search result         |
 | `enter`      | Open focused card in `$EDITOR`      |
 | `o`          | Create new card after focused card  |
 | `O`          | Create new card before focused card |
@@ -86,8 +93,10 @@ The application operates on a simple file-based structure.
 | `v`, `V`     | Enter visual mode                   |
 | `delete`     | Delete focused card                 |
 | `u`          | Undo last action                    |
+| `C-r`        | Redo last undone action             |
 | `.`          | Repeat last command                 |
 | `:`          | Enter command mode                  |
+| `C-p`        | Open fuzzy finder                   |
 | `esc`        | Clear selection and clipboard       |
 
 ### Visual Mode
@@ -106,6 +115,13 @@ The application operates on a simple file-based structure.
 | `l`, `right` | Exit visual mode                   |
 | `:`          | Enter command mode                 |
 
+### Search Mode
+
+| Key          | Action                               |
+| ------------ | ------------------------------------ |
+| `enter`      | Execute search and return to normal  |
+| `esc`, `C-c` | Cancel search and return to normal   |
+
 ### Command Mode
 
 | Key          | Action               |
@@ -118,7 +134,15 @@ The application operates on a simple file-based structure.
 
 Commands are entered after pressing `:`. Tab completion is available.
 
-### Card Management
+### Navigation & Search
+
+- `:fzf`
+  Open the fuzzy finder to search for cards.
+
+- `:noh`, `:nohlsearch`
+  Clear the last search term (stops `n`/`N` from working).
+
+### Card & Column Management
 
 - `:new {title}`
   Create a new card in the focused column.
@@ -129,13 +153,14 @@ Commands are entered after pressing `:`. Tab completion is available.
 - `:archive`
   Archive selected cards. Cards are moved to a special 'Archived' column.
 
-### Column Management
-
 - `:create {name}`
   Create a new column.
 
 - `:delete`
   Delete the focused column (only when the header is focused).
+
+- `:rename {new-name}`
+  Rename the focused column.
 
 - `:left`
   Move focused column to the left.
