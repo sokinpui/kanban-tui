@@ -260,6 +260,31 @@ func DeleteColumn(col column.Column) error {
 	return cmd.Run()
 }
 
+func RenameColumn(col *column.Column, newName string) error {
+	if col.Title == newName {
+		return nil // No change
+	}
+
+	newPath := filepath.Join(DataDirName, newName)
+	if _, err := os.Stat(newPath); !os.IsNotExist(err) {
+		return fmt.Errorf("column '%s' already exists", newName)
+	}
+
+	if err := os.Rename(col.Path, newPath); err != nil {
+		return fmt.Errorf("could not rename column directory: %w", err)
+	}
+
+	col.Title = newName
+	col.Path = newPath
+
+	for i := range col.Cards {
+		card := &col.Cards[i]
+		card.Path = filepath.Join(newPath, filepath.Base(card.Path))
+	}
+
+	return nil
+}
+
 func statePath() string {
 	return filepath.Join(DataDirName, StateFileName)
 }

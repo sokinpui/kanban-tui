@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"fmt"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"kanban/internal/card"
@@ -55,7 +56,7 @@ func (m *Model) handleCompletion() {
 	if !isCompletingArgument {
 		candidates = []string{
 			"archive", "create", "delete", "done", "hide", "left",
-			"new", "right", "set", "show", "sort", "unset",
+			"new", "rename", "right", "set", "show", "sort", "unset",
 		}
 	} else {
 		// If the last char is a space, we are completing the *next* word.
@@ -217,6 +218,50 @@ func (m *Model) executeCommand(commandStr string) tea.Cmd {
 		m.updateAndResizeFocus()
 		fs.WriteBoard(m.board)
 		m.focusedColumn = len(m.displayColumns) - 1
+
+	case "rename":
+		newName := strings.TrimSpace(args)
+		if newName == "" {
+			m.history.Drop()
+			m.statusMessage = "Usage: :rename <new-column-name>"
+			return clearStatusCmd(3 * time.Second)
+		}
+
+		for _, c := range m.board.Columns {
+			if c.Title == newName {
+				m.history.Drop()
+				m.statusMessage = fmt.Sprintf("Column '%s' already exists", newName)
+				return clearStatusCmd(3 * time.Second)
+			}
+		}
+		if m.board.Archived.Title == newName {
+			m.history.Drop()
+			m.statusMessage = fmt.Sprintf("Column '%s' already exists (Archived)", newName)
+			return clearStatusCmd(3 * time.Second)
+		}
+
+		colToRename := m.displayColumns[m.focusedColumn]
+		oldName := colToRename.Title
+
+		if oldName == fs.ArchiveColumnName {
+			m.history.Drop()
+			m.statusMessage = "Cannot rename the Archived column"
+			return clearStatusCmd(3 * time.Second)
+		}
+
+		if err := fs.RenameColumn(colToRename, newName); err != nil {
+			m.history.Drop()
+			m.statusMessage = fmt.Sprintf("Error renaming column: %v", err)
+			return clearStatusCmd(5 * time.Second)
+		}
+
+		if m.doneColumnName == oldName {
+			m.doneColumnName = newName
+		}
+
+		fs.WriteBoard(m.board)
+		m.statusMessage = fmt.Sprintf("Renamed column '%s' to '%s'", oldName, newName)
+		return clearStatusCmd(3 * time.Second)
 
 	case "delete":
 		if m.currentFocusedCard() != 0 || len(m.displayColumns) == 0 {

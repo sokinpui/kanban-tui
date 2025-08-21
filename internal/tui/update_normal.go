@@ -2,7 +2,6 @@
 package tui
 
 import (
-	"sort"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -135,10 +134,6 @@ func (m *Model) updateNormalMode(msg tea.Msg) tea.Cmd {
 		}
 
 		m.saveStateForUndo()
-		sort.Slice(m.clipboard, func(i, j int) bool {
-			return m.clipboard[i].CreatedAt.After(m.clipboard[j].CreatedAt)
-		})
-
 		destCol := m.displayColumns[m.focusedColumn]
 
 		insertIndex := 0
