@@ -47,6 +47,10 @@ var (
 	statusBarStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("231")).
 			Background(lipgloss.Color("#3e6452"))
+
+	searchHighlightStyle = lipgloss.NewStyle().
+				Background(lipgloss.Color("220")).
+				Foreground(lipgloss.Color("232"))
 )
 
 func renderBoard(m *Model, height int) string {
@@ -146,11 +150,27 @@ func renderCard(c card.Card, m *Model, columnIndex, cardIndex int, contentWidth 
 		style = selectedCardStyle
 	}
 
-	if c.HasContent() && !isSelected {
+	title := c.Title
+	if m.mode == searchMode && m.textInput.Value() != "" {
+		query := m.textInput.Value()
+		lowerTitle := strings.ToLower(title)
+		lowerQuery := strings.ToLower(query)
+
+		if idx := strings.Index(lowerTitle, lowerQuery); idx != -1 {
+			pre := title[:idx]
+			match := title[idx : idx+len(query)]
+			post := title[idx+len(query):]
+
+			highlightedMatch := searchHighlightStyle.Render(match)
+			title = lipgloss.JoinHorizontal(lipgloss.Top, pre, highlightedMatch, post)
+		}
+	}
+
+	if c.HasContent() && !isSelected && m.mode != searchMode {
 		style = style.Foreground(lipgloss.Color("81"))
 	}
 
-	return style.Copy().Width(contentWidth).Render(c.Title)
+	return style.Copy().Width(contentWidth).Render(title)
 }
 
 func renderStatusBar(m *Model) string {

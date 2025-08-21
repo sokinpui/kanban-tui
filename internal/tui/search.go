@@ -9,12 +9,13 @@ import (
 
 func (m *Model) performSearch() {
 	query := m.textInput.Value()
+
 	if query == "" {
-		query = m.lastSearchQuery
-	}
-	if query == "" {
+		m.searchResults = []searchResult{}
+		m.currentSearchResultIdx = -1
 		return
 	}
+	m.lastSearchQuery = query
 
 	m.lastSearchQuery = query
 	m.lastSearchDirection = m.textInput.Prompt
@@ -37,11 +38,14 @@ func (m *Model) performSearch() {
 	}
 }
 
-func (m *Model) jumpToFirstResult() tea.Cmd {
+func (m *Model) jumpToFirstResult(showMessageOnFail bool) tea.Cmd {
 	if len(m.searchResults) == 0 {
-		m.statusMessage = "Pattern not found: " + m.lastSearchQuery
-		m.textInput.SetValue("")
-		return clearStatusCmd(2 * time.Second)
+		if showMessageOnFail {
+			m.statusMessage = "Pattern not found: " + m.lastSearchQuery
+			m.textInput.SetValue("")
+			return clearStatusCmd(2 * time.Second)
+		}
+		return nil
 	}
 
 	currentCol := m.focusedColumn
