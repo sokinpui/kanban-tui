@@ -32,7 +32,7 @@ npm install --global trash-cli
 Install the application using `go`:
 
 ```sh
-go install github.com/your-username/kanban/cmd/kanban@latest
+go install github.com/sokinpui/kanban/cmd/kanban@latest
 ```
 
 ## Usage
