@@ -55,8 +55,8 @@ func (m *Model) handleCompletion() {
 
 	if !isCompletingArgument {
 		candidates = []string{
-			"archive", "create", "delete", "done", "hide", "left",
-			"new", "rename", "right", "set", "show", "sort", "unset",
+			"archive", "create", "delete", "done", "hide", "left", "new",
+			"noh", "nohlsearch", "rename", "right", "set", "show", "sort", "unset",
 		}
 	} else {
 		// If the last char is a space, we are completing the *next* word.
@@ -429,6 +429,13 @@ func (m *Model) executeCommand(commandStr string) tea.Cmd {
 		fs.WriteBoard(m.board)
 		m.updateAndResizeFocus()
 		m.statusMessage = "Moved column left"
+		return clearStatusCmd(2 * time.Second)
+	case "noh", "nohlsearch":
+		m.history.Drop() // Not an action to be undone
+		m.lastSearchQuery = ""
+		m.searchResults = []searchResult{}
+		m.currentSearchResultIdx = -1
+		m.statusMessage = "Search highlighting cleared"
 		return clearStatusCmd(2 * time.Second)
 	default:
 		m.history.Drop() // Invalid command, don't save state

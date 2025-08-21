@@ -22,9 +22,12 @@ func (m *Model) updateSearchMode(msg tea.Msg) tea.Cmd {
 		case tea.KeyEnter:
 			query := m.textInput.Value()
 			if query == "" && m.lastSearchQuery != "" {
-				m.textInput.SetValue(m.lastSearchQuery)
+				query = m.lastSearchQuery
+				m.textInput.SetValue(query)
 			}
 			m.performSearch()
+			m.lastSearchQuery = query
+			m.lastSearchDirection = m.textInput.Prompt
 			cmd = m.jumpToFirstResult(true)
 			m.mode = normalMode
 			m.textInput.Blur()

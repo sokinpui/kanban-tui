@@ -15,10 +15,6 @@ func (m *Model) performSearch() {
 		m.currentSearchResultIdx = -1
 		return
 	}
-	m.lastSearchQuery = query
-
-	m.lastSearchQuery = query
-	m.lastSearchDirection = m.textInput.Prompt
 	m.searchResults = []searchResult{}
 	m.currentSearchResultIdx = -1
 
