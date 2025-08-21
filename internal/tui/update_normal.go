@@ -15,6 +15,24 @@ func (m *Model) updateNormalMode(msg tea.Msg) tea.Cmd {
 		return nil
 	}
 
+	if keyMsg.Type == tea.KeyCtrlP {
+		m.mode = fzfMode
+		var items []FzfItem
+		for i := range m.board.Columns {
+			col := m.board.Columns[i]
+			for _, c := range col.Cards {
+				items = append(items, FzfItem{Card: c, ColTitle: col.Title})
+			}
+		}
+		if m.showHidden && m.board.Archived.CardCount() > 0 {
+			for _, c := range m.board.Archived.Cards {
+				items = append(items, FzfItem{Card: c, ColTitle: m.board.Archived.Title})
+			}
+		}
+		m.fzf.SetItems(items)
+		return m.fzf.Focus()
+	}
+
 	switch keyMsg.String() {
 	case "q", "ctrl+c":
 		return tea.Quit

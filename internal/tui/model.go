@@ -30,6 +30,7 @@ const (
 	commandMode
 	visualMode
 	searchMode
+	fzfMode
 )
 
 type searchResult struct {
@@ -60,6 +61,7 @@ type Model struct {
 	history           *history.History
 	lastCommand       string
 	statusMessage     string
+	fzf               FZFModel
 
 	lastSearchQuery        string
 	lastSearchDirection    string // "/" or "?"
@@ -84,6 +86,7 @@ func NewModel(b board.Board, state *fs.AppState) Model {
 		showHidden:        state.ShowHidden,
 		history:           history.New(),
 		searchResults:     []searchResult{},
+		fzf:               NewFZFModel(),
 		currentSearchResultIdx: -1,
 	}
 	m.updateDisplayColumns()
@@ -161,8 +164,34 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+		m.fzf.SetSize(m.width, m.height)
 		m.textInput.Width = m.width
 		m.ensureFocusedCardIsVisible()
+		return m, nil
+
+	case fzfCardSelectedMsg:
+		m.mode = normalMode
+		m.fzf.Blur()
+		found := false
+		for colIdx, col := range m.displayColumns {
+			for cardIdx, c := range col.Cards {
+				if c.UUID == msg.card.UUID {
+					m.focusedColumn = colIdx
+					m.setCurrentFocusedCard(cardIdx + 1)
+					m.ensureFocusedCardIsVisible()
+					found = true
+					break
+				}
+			}
+			if found {
+				break
+			}
+		}
+		return m, nil
+
+	case fzfCancelledMsg:
+		m.mode = normalMode
+		m.fzf.Blur()
 		return m, nil
 
 	case clearStatusMsg:
@@ -187,6 +216,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	var cmd tea.Cmd
 	switch m.mode {
+	case fzfMode:
+		newFzf, cmd := m.fzf.Update(msg)
+		m.fzf = newFzf.(FZFModel)
+		return m, cmd
 	case commandMode:
 		cmd = m.updateCommandMode(msg)
 	case visualMode:
@@ -202,6 +235,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m Model) View() string {
 	if m.height == 0 || m.width == 0 {
 		return ""
+	}
+
+	if m.mode == fzfMode {
+		return m.fzf.View()
 	}
 
 	statusBar := renderStatusBar(&m)
