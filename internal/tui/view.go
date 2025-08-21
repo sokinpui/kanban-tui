@@ -3,6 +3,8 @@ package tui
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -215,15 +217,40 @@ func renderStatusBar(m *Model) string {
 	}
 
 	renderedMode := modeStyle.Render(modeStr)
-	fileInfo := statusInfo.Render(" " + fs.BoardFileName + " ")
 
-	remainingWidth := m.width - lipgloss.Width(renderedMode) - lipgloss.Width(fileInfo)
+	fullPath := filepath.Join(m.board.Path, fs.BoardFileName)
+	displayPath := fullPath
+	home, err := os.UserHomeDir()
+	if err == nil && strings.HasPrefix(fullPath, home) {
+		displayPath = "~" + strings.TrimPrefix(fullPath, home)
+	}
+	fileInfo := statusInfo.Render(" " + displayPath + " ")
+
+	var progressInfo string
+	if len(m.displayColumns) > 0 && m.focusedColumn < len(m.displayColumns) {
+		col := m.displayColumns[m.focusedColumn]
+		total := col.CardCount()
+		current := m.currentFocusedCard()
+
+		var progressText string
+		if total == 0 {
+			progressText = "Empty"
+		} else if current == 0 {
+			progressText = "Top"
+		} else {
+			percent := (float64(current) / float64(total)) * 100
+			progressText = fmt.Sprintf("%d/%d %3.0f%%", current, total, percent)
+		}
+		progressInfo = statusInfo.Render(" " + progressText + " ")
+	}
+
+	remainingWidth := m.width - lipgloss.Width(renderedMode) - lipgloss.Width(fileInfo) - lipgloss.Width(progressInfo)
 	if remainingWidth < 0 {
 		remainingWidth = 0
 	}
 	filler := statusInfo.Render(strings.Repeat(" ", remainingWidth))
 
-	statusLine := lipgloss.JoinHorizontal(lipgloss.Left, renderedMode, fileInfo, filler)
+	statusLine := lipgloss.JoinHorizontal(lipgloss.Left, renderedMode, fileInfo, filler, progressInfo)
 
 	var commandLine string
 	if m.statusMessage != "" {
