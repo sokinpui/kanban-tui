@@ -572,3 +572,26 @@ func (m *Model) jumpTo(res searchResult) {
 	m.setCurrentFocusedCard(res.cardIndex)
 	m.ensureFocusedCardIsVisible()
 }
+
+func (m *Model) openFZF() tea.Cmd {
+	m.mode = fzfMode
+
+	m.lastSearchQuery = ""
+	m.searchResults = []searchResult{}
+	m.currentSearchResultIdx = -1
+
+	var items []FzfItem
+	for i := range m.board.Columns {
+		col := m.board.Columns[i]
+		for _, c := range col.Cards {
+			items = append(items, FzfItem{Card: c, ColTitle: col.Title})
+		}
+	}
+	if m.showHidden && m.board.Archived.CardCount() > 0 {
+		for _, c := range m.board.Archived.Cards {
+			items = append(items, FzfItem{Card: c, ColTitle: m.board.Archived.Title})
+		}
+	}
+	m.fzf.SetItems(items)
+	return m.fzf.Focus()
+}

@@ -29,7 +29,9 @@ func (m *Model) updateCommandMode(msg tea.Msg) tea.Cmd {
 			return nil
 		case tea.KeyEnter:
 			cmd = m.executeUserCommand()
-			m.mode = normalMode
+			if m.mode == commandMode {
+				m.mode = normalMode
+			}
 			m.textInput.Blur()
 			return cmd
 		case tea.KeyTab:
@@ -55,8 +57,8 @@ func (m *Model) handleCompletion() {
 
 	if !isCompletingArgument {
 		candidates = []string{
-			"archive", "create", "delete", "done", "hide", "left", "new",
-			"noh", "nohlsearch", "rename", "right", "set", "show", "sort", "unset",
+			"archive", "create", "delete", "done", "fzf", "hide", "left",
+			"new", "noh", "nohlsearch", "rename", "right", "set", "show", "sort", "unset",
 		}
 	} else {
 		// If the last char is a space, we are completing the *next* word.
@@ -129,6 +131,10 @@ func (m *Model) executeCommand(commandStr string) tea.Cmd {
 
 	m.saveStateForUndo()
 	switch command {
+	case "fzf":
+		m.history.Drop()
+		return m.openFZF()
+
 	case "new":
 		title := args
 		currentCol := m.displayColumns[m.focusedColumn]
