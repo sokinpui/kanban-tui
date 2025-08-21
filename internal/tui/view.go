@@ -146,12 +146,11 @@ func renderCard(c card.Card, m *Model, columnIndex, cardIndex int, contentWidth 
 		style = selectedCardStyle
 	}
 
-	title := c.Title
-	if c.HasContent() {
-		title = title + " 📄"
+	if c.HasContent() && !isSelected {
+		style = style.Foreground(lipgloss.Color("81"))
 	}
 
-	return style.Copy().Width(contentWidth).Render(title)
+	return style.Copy().Width(contentWidth).Render(c.Title)
 }
 
 func renderStatusBar(m *Model) string {
