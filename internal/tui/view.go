@@ -8,6 +8,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"kanban/internal/card"
 	"kanban/internal/column"
+	"kanban/internal/fs"
 )
 
 var (
@@ -47,6 +48,27 @@ var (
 	statusBarStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("231")).
 			Background(lipgloss.Color("#3e6452"))
+
+	statusModeNormal = lipgloss.NewStyle().
+				Background(lipgloss.Color("41")). // Green
+				Foreground(lipgloss.Color("232")). // Dark text
+				Padding(0, 1)
+
+	statusModeVisual = lipgloss.NewStyle().
+				Background(lipgloss.Color("98")). // Purple
+				Foreground(lipgloss.Color("232")).
+				Padding(0, 1)
+
+	statusModeCommand = lipgloss.NewStyle().
+				Background(lipgloss.Color("214")). // Yellow
+				Foreground(lipgloss.Color("232")).
+				Padding(0, 1)
+
+	statusInfo = lipgloss.NewStyle().
+			Background(lipgloss.Color("236")).
+			Foreground(lipgloss.Color("250"))
+
+	commandBarTextStyle = lipgloss.NewStyle().Bold(true)
 
 	searchHighlightStyle = lipgloss.NewStyle().
 				Background(lipgloss.Color("220")).
@@ -177,17 +199,45 @@ func renderCard(c card.Card, m *Model, columnIndex, cardIndex int, contentWidth 
 }
 
 func renderStatusBar(m *Model) string {
+	var modeStr string
+	var modeStyle lipgloss.Style
+
 	switch m.mode {
-	case commandMode:
-		return m.textInput.View()
-	case searchMode:
-		return m.textInput.View()
 	case visualMode:
-		return statusBarStyle.Copy().Width(m.width).Render("-- VISUAL --")
-	default:
-		if m.statusMessage != "" {
-			return statusBarStyle.Copy().Width(m.width).Render(m.statusMessage)
-		}
-		return ""
+		modeStr = "VISUAL"
+		modeStyle = statusModeVisual
+	case commandMode, searchMode:
+		modeStr = "COMMAND"
+		modeStyle = statusModeCommand
+	default: // normalMode and others
+		modeStr = "NORMAL"
+		modeStyle = statusModeNormal
 	}
+
+	renderedMode := modeStyle.Render(modeStr)
+	fileInfo := statusInfo.Render(" " + fs.BoardFileName + " ")
+
+	remainingWidth := m.width - lipgloss.Width(renderedMode) - lipgloss.Width(fileInfo)
+	if remainingWidth < 0 {
+		remainingWidth = 0
+	}
+	filler := statusInfo.Render(strings.Repeat(" ", remainingWidth))
+
+	statusLine := lipgloss.JoinHorizontal(lipgloss.Left, renderedMode, fileInfo, filler)
+
+	var commandLine string
+	if m.statusMessage != "" {
+		commandLine = statusBarStyle.Copy().Width(m.width).Render(m.statusMessage)
+	} else {
+		switch m.mode {
+		case visualMode:
+			commandLine = commandBarTextStyle.Render("-- VISUAL --")
+		case commandMode, searchMode:
+			commandLine = m.textInput.View()
+		default:
+			commandLine = "" // Render an empty line to reserve space
+		}
+	}
+
+	return lipgloss.JoinVertical(lipgloss.Left, statusLine, commandLine)
 }
