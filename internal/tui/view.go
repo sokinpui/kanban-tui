@@ -154,10 +154,7 @@ func renderCard(c card.Card, m *Model, columnIndex, cardIndex int, contentWidth 
 	var query string
 	if m.mode == searchMode {
 		query = m.textInput.Value()
-	} else {
-		query = m.lastSearchQuery
 	}
-
 	if query != "" {
 		lowerTitle := strings.ToLower(title)
 		lowerQuery := strings.ToLower(query)
