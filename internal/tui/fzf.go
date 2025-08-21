@@ -96,13 +96,13 @@ func (m FZFModel) Init() tea.Cmd {
 	return textinput.Blink
 }
 
-func (m FZFModel) Focus() tea.Cmd {
+func (m *FZFModel) Focus() tea.Cmd {
 	m.textinput.Focus()
 	m.filter()
 	return textinput.Blink
 }
 
-func (m FZFModel) Blur() {
+func (m *FZFModel) Blur() {
 	m.textinput.Blur()
 	m.textinput.SetValue("")
 }

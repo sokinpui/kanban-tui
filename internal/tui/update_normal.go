@@ -17,6 +17,11 @@ func (m *Model) updateNormalMode(msg tea.Msg) tea.Cmd {
 
 	if keyMsg.Type == tea.KeyCtrlP {
 		m.mode = fzfMode
+
+		m.lastSearchQuery = ""
+		m.searchResults = []searchResult{}
+		m.currentSearchResultIdx = -1
+
 		var items []FzfItem
 		for i := range m.board.Columns {
 			col := m.board.Columns[i]
