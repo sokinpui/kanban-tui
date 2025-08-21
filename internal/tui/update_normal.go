@@ -163,50 +163,50 @@ func (m *Model) updateNormalMode(msg tea.Msg) tea.Cmd {
 				fs.MoveCard(c, *destCol)
 			}
 
-			// Rebuild destination column's cards
-			newDestCards := make([]card.Card, 0, len(destCol.Cards)+len(m.clipboard))
-			for j := 0; j < insertIndex; j++ {
-				c := destCol.Cards[j]
-				if _, isCut := clipboardUUIDs[c.UUID]; !isCut {
-					newDestCards = append(newDestCards, c)
-				}
-			}
-			newDestCards = append(newDestCards, m.clipboard...)
-			for j := insertIndex; j < len(destCol.Cards); j++ {
-				c := destCol.Cards[j]
-				if _, isCut := clipboardUUIDs[c.UUID]; !isCut {
-					newDestCards = append(newDestCards, c)
-				}
-			}
-
-			// Remove cards from all columns, applying the new slice to destCol
+			// Remove cut cards from all columns that are NOT the destination.
 			for i := range m.board.Columns {
 				col := &m.board.Columns[i]
 				if col.Title == destCol.Title {
-					col.Cards = newDestCards
-				} else {
-					keptCards := make([]card.Card, 0, len(col.Cards))
-					for _, c := range col.Cards {
-						if _, found := clipboardUUIDs[c.UUID]; !found {
-							keptCards = append(keptCards, c)
-						}
-					}
-					col.Cards = keptCards
+					continue
 				}
-			}
-
-			// Handle archived column
-			if m.board.Archived.Title == destCol.Title {
-				m.board.Archived.Cards = newDestCards
-			} else {
-				keptCards := make([]card.Card, 0, len(m.board.Archived.Cards))
-				for _, c := range m.board.Archived.Cards {
-					if _, found := clipboardUUIDs[c.UUID]; !found {
+				keptCards := make([]card.Card, 0, len(col.Cards))
+				for _, c := range col.Cards {
+					if _, isCut := clipboardUUIDs[c.UUID]; !isCut {
 						keptCards = append(keptCards, c)
 					}
 				}
-				m.board.Archived.Cards = keptCards
+				col.Cards = keptCards
 			}
+			if m.board.Archived.Title != destCol.Title {
+				keptArchived := make([]card.Card, 0, len(m.board.Archived.Cards))
+				for _, c := range m.board.Archived.Cards {
+					if _, isCut := clipboardUUIDs[c.UUID]; !isCut {
+						keptArchived = append(keptArchived, c)
+					}
+				}
+				m.board.Archived.Cards = keptArchived
+			}
+
+			// Rebuild the destination column's card list, inserting the clipboard.
+			// This correctly handles cutting and pasting within the same column.
+			newDestCards := make([]card.Card, 0, len(destCol.Cards)+len(m.clipboard))
+
+			for i := 0; i < insertIndex; i++ {
+				c := destCol.Cards[i]
+				if _, isCut := clipboardUUIDs[c.UUID]; !isCut {
+					newDestCards = append(newDestCards, c)
+				}
+			}
+
+			newDestCards = append(newDestCards, m.clipboard...)
+
+			for i := insertIndex; i < len(destCol.Cards); i++ {
+				c := destCol.Cards[i]
+				if _, isCut := clipboardUUIDs[c.UUID]; !isCut {
+					newDestCards = append(newDestCards, c)
+				}
+			}
+			destCol.Cards = newDestCards
 		} else {
 			var newCards []card.Card
 			for _, c := range m.clipboard {
@@ -219,6 +219,10 @@ func (m *Model) updateNormalMode(msg tea.Msg) tea.Cmd {
 				destCol.Cards = append(destCol.Cards[:insertIndex], append(newCards, destCol.Cards[insertIndex:]...)...)
 			}
 		}
+		m.isCut = false
+		m.clipboard = []card.Card{}
+		m.clampFocusedCard()
+		m.ensureFocusedCardIsVisible()
 
 	case "delete":
 		var cardsToDelete []card.Card
