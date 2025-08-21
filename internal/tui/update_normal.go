@@ -29,6 +29,24 @@ func (m *Model) updateNormalMode(msg tea.Msg) tea.Cmd {
 		m.textInput.SetValue("")
 		return m.textInput.Focus()
 
+	case "/":
+		m.mode = searchMode
+		m.textInput.Prompt = "/"
+		m.textInput.SetValue("")
+		return m.textInput.Focus()
+
+	case "?":
+		m.mode = searchMode
+		m.textInput.Prompt = "?"
+		m.textInput.SetValue("")
+		return m.textInput.Focus()
+
+	case "n":
+		return m.findNext()
+
+	case "N":
+		return m.findPrev()
+
 	case "h", "left":
 		if m.focusedColumn > 0 {
 			m.focusedColumn--

@@ -29,7 +29,13 @@ const (
 	normalMode mode = iota
 	commandMode
 	visualMode
+	searchMode
 )
+
+type searchResult struct {
+	colIndex  int
+	cardIndex int // 1-based, like focus
+}
 
 type Model struct {
 	board             board.Board
@@ -54,6 +60,11 @@ type Model struct {
 	history           *history.History
 	lastCommand       string
 	statusMessage     string
+
+	lastSearchQuery        string
+	lastSearchDirection    string // "/" or "?"
+	searchResults          []searchResult
+	currentSearchResultIdx int
 }
 
 func NewModel(b board.Board, state *fs.AppState) Model {
@@ -72,6 +83,8 @@ func NewModel(b board.Board, state *fs.AppState) Model {
 		doneColumnName:    state.DoneColumn,
 		showHidden:        state.ShowHidden,
 		history:           history.New(),
+		searchResults:     []searchResult{},
+		currentSearchResultIdx: -1,
 	}
 	m.updateDisplayColumns()
 
@@ -178,6 +191,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmd = m.updateCommandMode(msg)
 	case visualMode:
 		cmd = m.updateVisualMode(msg)
+	case searchMode:
+		cmd = m.updateSearchMode(msg)
 	default: // normalMode
 		cmd = m.updateNormalMode(msg)
 	}
@@ -513,4 +528,10 @@ func (m *Model) updateAndResizeFocus() {
 		}
 	}
 	m.clampFocusedCard()
+}
+
+func (m *Model) jumpTo(res searchResult) {
+	m.focusedColumn = res.colIndex
+	m.setCurrentFocusedCard(res.cardIndex)
+	m.ensureFocusedCardIsVisible()
 }

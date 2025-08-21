@@ -157,6 +157,8 @@ func renderStatusBar(m *Model) string {
 	switch m.mode {
 	case commandMode:
 		return m.textInput.View()
+	case searchMode:
+		return m.textInput.View()
 	case visualMode:
 		return statusBarStyle.Copy().Width(m.width).Render("-- VISUAL --")
 	default:
