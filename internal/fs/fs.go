@@ -152,6 +152,11 @@ func CreateSampleBoard(b *board.Board) error {
 }
 
 func LoadCard(path string) (card.Card, error) {
+	fileInfo, err := os.Stat(path)
+	if err != nil {
+		return card.Card{}, err
+	}
+
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return card.Card{}, err
@@ -170,6 +175,7 @@ func LoadCard(path string) (card.Card, error) {
 	c.Content = strings.TrimSpace(parts[2])
 	c.Path = path
 	c.UUID = strings.TrimSuffix(filepath.Base(path), ".md")
+	c.Size = fileInfo.Size()
 
 	return c, nil
 }
@@ -189,6 +195,13 @@ func CreateCard(col column.Column, title string) (card.Card, error) {
 	if err := WriteCard(c); err != nil {
 		return card.Card{}, err
 	}
+
+	fileInfo, err := os.Stat(c.Path)
+	if err != nil {
+		// This should not happen as we just wrote the file
+		return c, nil
+	}
+	c.Size = fileInfo.Size()
 
 	return c, nil
 }

@@ -9,6 +9,7 @@ type Card struct {
 	Content    string    `yaml:"-"`
 	CreatedAt  time.Time `yaml:"createdAt"`
 	ModifiedAt time.Time `yaml:"modifiedAt"`
+	Size       int64     `yaml:"-"` // File size in bytes
 }
 
 func New(title string) Card {

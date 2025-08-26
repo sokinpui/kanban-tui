@@ -67,8 +67,9 @@ func (m *Model) updateCompletions() {
 
 	if !isCompletingArgument {
 		candidates = []string{
-			"archive", "create", "delete", "done", "fzf", "hide", "left",
-			"new", "noh", "nohlsearch", "rename", "right", "set", "show", "sort", "unset",
+			"archive", "create", "delete", "done", "fzf", "hide", "left", "new",
+			"noh", "nohlsearch", "rename", "right", "set", "show", "sort", "sort!",
+			"unset",
 		}
 	} else {
 		// If the last char is a space, we are completing the *next* word
@@ -78,12 +79,13 @@ func (m *Model) updateCompletions() {
 		}
 
 		command := parts[0]
+		if strings.HasSuffix(command, "!") {
+			command = strings.TrimSuffix(command, "!")
+		}
 		switch command {
 		case "sort":
 			if len(parts) == 2 {
-				candidates = []string{"create", "modify"}
-			} else if len(parts) == 3 {
-				candidates = []string{"asc", "desc"}
+				candidates = []string{"create", "modify", "name", "size"}
 			}
 		case "set":
 			candidates = []string{"done", "done?"}
@@ -153,6 +155,12 @@ func (m *Model) executeCommand(commandStr string) tea.Cmd {
 		args = parts[1]
 	}
 
+	descending := false
+	if strings.HasSuffix(command, "!") {
+		command = strings.TrimSuffix(command, "!")
+		descending = true
+	}
+
 	m.saveStateForUndo()
 	switch command {
 	case "fzf":
@@ -198,11 +206,17 @@ func (m *Model) executeCommand(commandStr string) tea.Cmd {
 		m.setCurrentFocusedCard(insertIndex + 1)
 		m.ensureFocusedCardIsVisible()
 	case "sort":
-		sortArgs := strings.Fields(args)
-		if len(sortArgs) != 2 {
-			return nil
+		field := "name"
+		if args != "" {
+			field = args
 		}
-		field, direction := sortArgs[0], sortArgs[1]
+
+		validFields := map[string]bool{"name": true, "create": true, "modify": true, "size": true}
+		if !validFields[field] {
+			m.history.Drop()
+			m.statusMessage = fmt.Sprintf("Invalid sort field: %s. Valid: name, create, modify, size.", field)
+			return clearStatusCmd(5 * time.Second)
+		}
 
 		currentCol := m.displayColumns[m.focusedColumn]
 		if len(currentCol.Cards) < 2 {
@@ -210,25 +224,25 @@ func (m *Model) executeCommand(commandStr string) tea.Cmd {
 		}
 
 		sort.Slice(currentCol.Cards, func(i, j int) bool {
-			var timeI, timeJ time.Time
+			cardI := currentCol.Cards[i]
+			cardJ := currentCol.Cards[j]
+			var less bool
+
 			switch field {
 			case "modify":
-				timeI = currentCol.Cards[i].ModifiedAt
-				timeJ = currentCol.Cards[j].ModifiedAt
+				less = cardI.ModifiedAt.Before(cardJ.ModifiedAt)
 			case "create":
-				timeI = currentCol.Cards[i].CreatedAt
-				timeJ = currentCol.Cards[j].CreatedAt
-			default:
-				return false
+				less = cardI.CreatedAt.Before(cardJ.CreatedAt)
+			case "size":
+				less = cardI.Size < cardJ.Size
+			case "name":
+				less = strings.ToLower(cardI.Title) < strings.ToLower(cardJ.Title)
 			}
 
-			if direction == "asc" {
-				return timeI.Before(timeJ)
+			if descending {
+				return !less
 			}
-			if direction == "desc" {
-				return timeI.After(timeJ)
-			}
-			return false
+			return less
 		})
 
 		fs.WriteBoard(m.board)
