@@ -63,6 +63,8 @@ type Model struct {
 	statusMessage     string
 	fzf               FZFModel
 
+	completionMatches      []string
+	completionIndex        int
 	lastSearchQuery        string
 	lastSearchDirection    string // "/" or "?"
 	searchResults          []searchResult
@@ -87,6 +89,8 @@ func NewModel(b board.Board, state *fs.AppState) Model {
 		history:           history.New(),
 		searchResults:     []searchResult{},
 		fzf:               NewFZFModel(),
+		completionMatches:      []string{},
+		completionIndex:        -1,
 		currentSearchResultIdx: -1,
 	}
 	m.updateDisplayColumns()

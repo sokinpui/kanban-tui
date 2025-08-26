@@ -16,6 +16,7 @@ import (
 
 func (m *Model) updateCommandMode(msg tea.Msg) tea.Cmd {
 	var cmd tea.Cmd
+	prevVal := m.textInput.Value()
 
 	if keyMsg, ok := msg.(tea.KeyMsg); ok {
 		switch keyMsg.Type {
@@ -26,6 +27,8 @@ func (m *Model) updateCommandMode(msg tea.Msg) tea.Cmd {
 			m.selected = make(map[string]struct{})
 			m.clipboard = []card.Card{}
 			m.isCut = false
+			m.completionMatches = nil
+			m.completionIndex = -1
 			return nil
 		case tea.KeyEnter:
 			cmd = m.executeUserCommand()
@@ -33,21 +36,28 @@ func (m *Model) updateCommandMode(msg tea.Msg) tea.Cmd {
 				m.mode = normalMode
 			}
 			m.textInput.Blur()
+			m.completionMatches = nil
+			m.completionIndex = -1
 			return cmd
 		case tea.KeyTab:
-			m.handleCompletion()
+			m.cycleCompletion()
 			return nil
 		}
 	}
 	m.textInput, cmd = m.textInput.Update(msg)
+	if m.textInput.Value() != prevVal {
+		m.updateCompletions()
+	}
 	return cmd
 }
 
-func (m *Model) handleCompletion() {
+func (m *Model) updateCompletions() {
 	inputValue := m.textInput.Value()
 	parts := strings.Split(inputValue, " ")
 
 	if len(parts) == 0 {
+		m.completionMatches = nil
+		m.completionIndex = -1
 		return
 	}
 
@@ -61,7 +71,7 @@ func (m *Model) handleCompletion() {
 			"new", "noh", "nohlsearch", "rename", "right", "set", "show", "sort", "unset",
 		}
 	} else {
-		// If the last char is a space, we are completing the *next* word.
+		// If the last char is a space, we are completing the *next* word
 		if strings.HasSuffix(inputValue, " ") {
 			wordToComplete = ""
 			parts = append(parts, "")
@@ -85,28 +95,42 @@ func (m *Model) handleCompletion() {
 	}
 
 	if len(candidates) == 0 {
+		m.completionMatches = nil
+		m.completionIndex = -1
 		return
 	}
 
 	var matches []string
 	for _, c := range candidates {
-		if strings.HasPrefix(c, wordToComplete) {
+		if strings.HasPrefix(c, strings.ToLower(wordToComplete)) {
 			matches = append(matches, c)
 		}
 	}
 
 	if len(matches) == 0 {
+		m.completionMatches = nil
+		m.completionIndex = -1
 		return
 	}
 
-	nextMatch := matches[0]
-	for i, match := range matches {
-		if match == wordToComplete {
-			nextMatch = matches[(i+1)%len(matches)]
-			break
-		}
+	m.completionMatches = matches
+	m.completionIndex = -1
+}
+
+func (m *Model) cycleCompletion() {
+	if len(m.completionMatches) == 0 {
+		return
 	}
 
+	m.completionIndex++
+	if m.completionIndex >= len(m.completionMatches) {
+		m.completionIndex = 0
+	}
+
+	nextMatch := m.completionMatches[m.completionIndex]
+
+	inputValue := m.textInput.Value()
+	parts := strings.Split(inputValue, " ")
 	prefixParts := parts[:len(parts)-1]
 	newValue := strings.Join(append(prefixParts, nextMatch), " ")
 

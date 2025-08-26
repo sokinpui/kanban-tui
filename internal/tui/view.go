@@ -75,6 +75,15 @@ var (
 	searchHighlightStyle = lipgloss.NewStyle().
 				Background(lipgloss.Color("220")).
 				Foreground(lipgloss.Color("232"))
+
+	completionItemStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("245")).
+				Background(lipgloss.Color("236")).
+				Padding(0, 1)
+
+	selectedCompletionItemStyle = completionItemStyle.Copy().
+					Foreground(lipgloss.Color("231")).
+					Background(lipgloss.Color("205"))
 )
 
 func renderBoard(m *Model, height int) string {
@@ -200,6 +209,22 @@ func renderCard(c card.Card, m *Model, columnIndex, cardIndex int, contentWidth 
 	return style.Copy().Width(contentWidth).Render(title)
 }
 
+func renderCompletionMenu(m *Model) string {
+	if len(m.completionMatches) == 0 {
+		return ""
+	}
+
+	var items []string
+	for i, match := range m.completionMatches {
+		if i == m.completionIndex {
+			items = append(items, selectedCompletionItemStyle.Render(match))
+		} else {
+			items = append(items, completionItemStyle.Render(match))
+		}
+	}
+	return lipgloss.JoinHorizontal(lipgloss.Top, items...)
+}
+
 func renderStatusBar(m *Model) string {
 	var modeStr string
 	var modeStyle lipgloss.Style
@@ -253,6 +278,8 @@ func renderStatusBar(m *Model) string {
 	statusLine := lipgloss.JoinHorizontal(lipgloss.Left, renderedMode, fileInfo, filler, progressInfo)
 
 	var commandLine string
+	var completionMenu string
+
 	if m.statusMessage != "" {
 		commandLine = statusBarStyle.Copy().Width(m.width).Render(m.statusMessage)
 	} else {
@@ -260,11 +287,17 @@ func renderStatusBar(m *Model) string {
 		case visualMode:
 			commandLine = commandBarTextStyle.Render("-- VISUAL --")
 		case commandMode, searchMode:
+			if m.mode == commandMode {
+				completionMenu = renderCompletionMenu(m)
+			}
 			commandLine = m.textInput.View()
 		default:
 			commandLine = "" // Render an empty line to reserve space
 		}
 	}
 
+	if completionMenu != "" {
+		return lipgloss.JoinVertical(lipgloss.Left, statusLine, completionMenu, commandLine)
+	}
 	return lipgloss.JoinVertical(lipgloss.Left, statusLine, commandLine)
 }
