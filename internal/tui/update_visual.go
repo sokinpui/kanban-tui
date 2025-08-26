@@ -65,6 +65,7 @@ func (m *Model) updateVisualMode(msg tea.Msg) tea.Cmd {
 		}
 
 	case ":":
+		m.statusMessage = ""
 		m.mode = commandMode
 		m.textInput.SetValue("")
 		return m.textInput.Focus()

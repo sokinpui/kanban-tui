@@ -29,17 +29,20 @@ func (m *Model) updateNormalMode(msg tea.Msg) tea.Cmd {
 		m.isCut = false
 
 	case ":":
+		m.statusMessage = ""
 		m.mode = commandMode
 		m.textInput.SetValue("")
 		return m.textInput.Focus()
 
 	case "/":
+		m.statusMessage = ""
 		m.mode = searchMode
 		m.textInput.Prompt = "/"
 		m.textInput.SetValue("")
 		return m.textInput.Focus()
 
 	case "?":
+		m.statusMessage = ""
 		m.mode = searchMode
 		m.textInput.Prompt = "?"
 		m.textInput.SetValue("")
@@ -105,12 +108,14 @@ func (m *Model) updateNormalMode(msg tea.Msg) tea.Cmd {
 		}
 
 	case "O":
+		m.statusMessage = ""
 		m.createCardMode = "before"
 		m.mode = commandMode
 		m.textInput.SetValue("new ")
 		return m.textInput.Focus()
 
 	case "o":
+		m.statusMessage = ""
 		m.createCardMode = "after"
 		m.mode = commandMode
 		m.textInput.SetValue("new ")
