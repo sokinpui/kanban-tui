@@ -67,9 +67,8 @@ func (m *Model) updateCompletions() {
 
 	if !isCompletingArgument {
 		candidates = []string{
-			"archive", "create", "delete", "done", "fzf", "hide", "left", "new",
-			"noh", "nohlsearch", "rename", "right", "set", "show", "sort", "sort!",
-			"unset",
+			"archive", "create", "delete", "done", "fzf", "hide", "left", "new", "noh",
+			"nohlsearch", "q", "rename", "right", "set", "show", "sort", "sort!", "unset",
 		}
 	} else {
 		command := parts[0]
@@ -163,6 +162,10 @@ func (m *Model) executeCommand(commandStr string) tea.Cmd {
 
 	m.saveStateForUndo()
 	switch command {
+	case "q", "Q", "wq", "wQ", "Wq", "WQ", "x":
+		m.history.Drop()
+		return tea.Quit
+
 	case "fzf":
 		m.history.Drop()
 		return m.openFZF()
