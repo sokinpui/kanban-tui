@@ -162,7 +162,7 @@ func (m *Model) executeCommand(commandStr string) tea.Cmd {
 
 	m.saveStateForUndo()
 	switch command {
-	case "q", "Q", "wq", "wQ", "Wq", "WQ", "x":
+	case "q", "Q", "wq", "wQ", "Wq", "WQ":
 		m.history.Drop()
 		return tea.Quit
 
