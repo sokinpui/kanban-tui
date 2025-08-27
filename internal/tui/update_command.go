@@ -72,12 +72,6 @@ func (m *Model) updateCompletions() {
 			"unset",
 		}
 	} else {
-		// If the last char is a space, we are completing the *next* word
-		if strings.HasSuffix(inputValue, " ") {
-			wordToComplete = ""
-			parts = append(parts, "")
-		}
-
 		command := parts[0]
 		if strings.HasSuffix(command, "!") {
 			command = strings.TrimSuffix(command, "!")
@@ -88,11 +82,17 @@ func (m *Model) updateCompletions() {
 				candidates = []string{"create", "modify", "name", "size"}
 			}
 		case "set":
-			candidates = []string{"done", "done?"}
+			if len(parts) == 2 {
+				candidates = []string{"done", "done?"}
+			}
 		case "unset":
-			candidates = []string{"done"}
+			if len(parts) == 2 {
+				candidates = []string{"done"}
+			}
 		case "show", "hide":
-			candidates = []string{"hidden"}
+			if len(parts) == 2 {
+				candidates = []string{"hidden"}
+			}
 		}
 	}
 

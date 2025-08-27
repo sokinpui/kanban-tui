@@ -32,6 +32,7 @@ func (m *Model) updateNormalMode(msg tea.Msg) tea.Cmd {
 		m.statusMessage = ""
 		m.mode = commandMode
 		m.textInput.SetValue("")
+		m.updateCompletions()
 		return m.textInput.Focus()
 
 	case "/":
