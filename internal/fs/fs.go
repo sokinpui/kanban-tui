@@ -221,7 +221,23 @@ func WriteCard(c card.Card) error {
 
 func MoveCard(c *card.Card, destCol column.Column) error {
 	newPath := filepath.Join(destCol.Path, filepath.Base(c.Path))
-	if err := os.Rename(c.Path, newPath); err != nil {
+
+	if c.Path == newPath {
+		return nil
+	}
+
+	err := os.Rename(c.Path, newPath)
+	if err != nil {
+		// This handles state desynchronization after an undo that only reverts
+		// in-memory state but not filesystem operations. If the rename fails
+		// because the source file doesn't exist, we check if it's because the
+		// file is *already* at the destination.
+		if os.IsNotExist(err) {
+			if _, statErr := os.Stat(newPath); statErr == nil {
+				c.Path = newPath
+				return WriteCard(*c)
+			}
+		}
 		return err
 	}
 	c.Path = newPath
