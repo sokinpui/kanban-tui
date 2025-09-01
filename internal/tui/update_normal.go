@@ -307,7 +307,7 @@ func (m *Model) updateNormalMode(msg tea.Msg) tea.Cmd {
 	case ".":
 		if m.lastCommand != "" {
 			m.statusMessage = "Repeating: " + m.lastCommand
-			m.executeCommand(m.lastCommand)
+			m.ExecuteCommand(m.lastCommand)
 			return clearStatusCmd(2 * time.Second)
 		}
 		m.statusMessage = "No command to repeat"

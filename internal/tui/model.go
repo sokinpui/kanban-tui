@@ -3,6 +3,7 @@ package tui
 
 import (
 	"fmt"
+	"strings"
 	"time"
 	"os"
 
@@ -735,4 +736,33 @@ func (m *Model) popBoard() tea.Cmd {
 
 	m.statusMessage = "Returned to board: " + m.board.Path
 	return clearStatusCmd(2 * time.Second)
+}
+
+func (m *Model) ExecuteCommand(commandStr string) tea.Cmd {
+	parts := strings.SplitN(strings.TrimSpace(commandStr), " ", 2)
+	command := parts[0]
+	var args string
+	if len(parts) > 1 {
+		args = parts[1]
+	}
+
+	lookupName := command
+	if strings.HasSuffix(lookupName, "!") {
+		lookupName = strings.TrimSuffix(lookupName, "!")
+	}
+
+	cmdInfo, ok := commandRegistry[lookupName]
+	if !ok {
+		// This handles aliases like 'wq' which don't have a '!' variant
+		cmdInfo, ok = commandRegistry[command]
+	}
+
+	if !ok {
+		m.statusMessage = fmt.Sprintf("Not a command: %s", command)
+		return clearStatusCmd(2 * time.Second)
+	}
+
+	// Why: The command itself is responsible for saving state for undo,
+	// because not all commands are undoable (e.g., view changes).
+	return cmdInfo.execute(m, command, args)
 }
