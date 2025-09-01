@@ -21,6 +21,9 @@ func (m *Model) updateNormalMode(msg tea.Msg) tea.Cmd {
 
 	switch keyMsg.String() {
 	case "q", "ctrl+c":
+		if len(m.boardStack) > 0 {
+			return m.popBoard()
+		}
 		return tea.Quit
 
 	case "esc":

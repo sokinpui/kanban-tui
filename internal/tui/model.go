@@ -4,6 +4,7 @@ package tui
 import (
 	"fmt"
 	"time"
+	"os"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
@@ -38,8 +39,20 @@ type searchResult struct {
 	cardIndex int // 1-based, like focus
 }
 
+type boardSession struct {
+	board           board.Board
+	focusedColumn   int
+	columnCardFocus []int
+	scrollOffset    int
+	doneColumnName  string
+	showHidden      bool
+}
+
 type Model struct {
 	board             board.Board
+	// boardStack allows navigating into linked boards and returning.
+	boardStack        []boardSession
+
 	displayColumns    []*column.Column
 	focusedColumn     int
 	columnCardFocus   []int
@@ -77,6 +90,7 @@ func NewModel(b board.Board, state *fs.AppState) Model {
 
 	m := Model{
 		board:             b,
+		boardStack:        []boardSession{},
 		mode:              normalMode,
 		textInput:         ti,
 		selected:          make(map[string]struct{}),
@@ -222,6 +236,31 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.statusMessage = msg.err.Error()
 			return m, clearStatusCmd(4 * time.Second)
 		}
+
+		// Why: Save the state of the current board before navigating away.
+		currentState := m.State()
+		if err := fs.SaveState(currentState.FocusedColumn, currentState.FocusedCard, currentState.DoneColumn, currentState.ShowHidden); err != nil {
+			m.statusMessage = fmt.Sprintf("Error saving state: %v", err)
+			return m, clearStatusCmd(4 * time.Second)
+		}
+
+		session := boardSession{
+			board:           m.board,
+			focusedColumn:   m.focusedColumn,
+			columnCardFocus: m.columnCardFocus,
+			scrollOffset:    m.scrollOffset,
+			doneColumnName:  m.doneColumnName,
+			showHidden:      m.showHidden,
+		}
+		m.boardStack = append(m.boardStack, session)
+
+		if err := os.Chdir(msg.path); err != nil {
+			// If we can't change directory, we can't proceed. Roll back the stack push.
+			m.boardStack = m.boardStack[:len(m.boardStack)-1]
+			m.statusMessage = fmt.Sprintf("Error changing directory: %v", err)
+			return m, clearStatusCmd(4 * time.Second)
+		}
+
 		m.reInit(msg.board, &msg.state)
 		m.statusMessage = "Switched to board: " + msg.board.Path
 		return m, clearStatusCmd(2 * time.Second)
@@ -251,11 +290,13 @@ func (m *Model) reInit(b board.Board, state *fs.AppState) {
 
 	// Preserve window size
 	width, height := m.width, m.height
+	boardStack := m.boardStack
 
 	// Re-initialize the model struct
 	*m = Model{
 		width:             width,
 		height:            height,
+		boardStack:        boardStack,
 		board:             b,
 		mode:              normalMode,
 		textInput:         ti,
@@ -657,4 +698,41 @@ func (m *Model) openFZF() tea.Cmd {
 	}
 	m.fzf.SetItems(items)
 	return m.fzf.Focus()
+}
+
+func (m *Model) popBoard() tea.Cmd {
+	if len(m.boardStack) == 0 {
+		return tea.Quit
+	}
+
+	// Why: Save the state of the board we are leaving.
+	currentState := m.State()
+	if err := fs.SaveState(currentState.FocusedColumn, currentState.FocusedCard, currentState.DoneColumn, currentState.ShowHidden); err != nil {
+		m.statusMessage = fmt.Sprintf("Error saving state: %v", err)
+		return clearStatusCmd(4 * time.Second)
+	}
+
+	lastSession := m.boardStack[len(m.boardStack)-1]
+	m.boardStack = m.boardStack[:len(m.boardStack)-1]
+
+	if err := os.Chdir(lastSession.board.Path); err != nil {
+		// This is a fatal error, as the application state is now desynced
+		// from the filesystem. It's safest to quit.
+		fmt.Fprintf(os.Stderr, "FATAL: could not chdir back to %s: %v\n", lastSession.board.Path, err)
+		return tea.Quit
+	}
+
+	m.board = lastSession.board
+	m.focusedColumn = lastSession.focusedColumn
+	m.columnCardFocus = lastSession.columnCardFocus
+	m.scrollOffset = lastSession.scrollOffset
+	m.doneColumnName = lastSession.doneColumnName
+	m.showHidden = lastSession.showHidden
+
+	m.updateDisplayColumns()
+	m.clampFocusedCard()
+	m.ensureFocusedCardIsVisible()
+
+	m.statusMessage = "Returned to board: " + m.board.Path
+	return clearStatusCmd(2 * time.Second)
 }

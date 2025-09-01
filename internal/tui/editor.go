@@ -32,6 +32,7 @@ func openEditor(path string) tea.Cmd {
 type boardSwitchedMsg struct {
 	board board.Board
 	state fs.AppState
+	path  string
 	err   error
 }
 
@@ -57,9 +58,18 @@ func switchToBoardCmd(path string) tea.Cmd {
 		}
 
 		dir := filepath.Dir(path)
-		if err := os.Chdir(dir); err != nil {
-			return boardSwitchedMsg{err: fmt.Errorf("could not change to directory %s: %w", dir, err)}
+		originalWd, err := os.Getwd()
+		if err != nil {
+			return boardSwitchedMsg{err: fmt.Errorf("could not get current directory: %w", err)}
 		}
+
+		// We must chdir to the new board's directory to load it correctly,
+		// but we chdir back immediately to not affect the current process's state
+		// until the user confirms the switch in the update loop.
+		if err := os.Chdir(dir); err != nil {
+			return boardSwitchedMsg{err: fmt.Errorf("could not access directory %s: %w", dir, err)}
+		}
+		defer os.Chdir(originalWd)
 
 		newBoard, err := fs.LoadBoard()
 		if err != nil {
@@ -68,9 +78,10 @@ func switchToBoardCmd(path string) tea.Cmd {
 
 		newState, err := fs.LoadState()
 		if err != nil {
+			// Non-fatal, we can continue with defaults
 			fmt.Fprintf(os.Stderr, "could not load state for new board: %v\n", err)
 		}
 
-		return boardSwitchedMsg{board: newBoard, state: newState}
+		return boardSwitchedMsg{board: newBoard, state: newState, path: dir}
 	}
 }

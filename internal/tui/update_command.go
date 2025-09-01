@@ -163,7 +163,15 @@ func (m *Model) executeCommand(commandStr string) tea.Cmd {
 	m.saveStateForUndo()
 	switch command {
 	case "q", "Q", "wq", "wQ", "Wq", "WQ":
+		// For non-quitting commands, we save state for undo.
+		// For quit, we don't want it in the undo history of the parent board.
 		m.history.Drop()
+
+		// popBoard saves the current view state before switching back.
+		// This is desired for both q and wq when navigating boards.
+		if len(m.boardStack) > 0 {
+			return m.popBoard()
+		}
 		return tea.Quit
 
 	case "fzf":
