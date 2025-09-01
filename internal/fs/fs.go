@@ -250,6 +250,7 @@ func CopyCard(c card.Card, destCol column.Column) (card.Card, error) {
 		return card.Card{}, err
 	}
 	newCard.Content = c.Content
+	newCard.Link = c.Link
 	if err := WriteCard(newCard); err != nil {
 		return card.Card{}, err
 	}

@@ -6,6 +6,7 @@ type Card struct {
 	UUID       string    `yaml:"-"` // Derived from filename
 	Path       string    `yaml:"-"`
 	Title      string    `yaml:"title"`
+	Link       string    `yaml:"link,omitempty"`
 	Content    string    `yaml:"-"`
 	CreatedAt  time.Time `yaml:"createdAt"`
 	ModifiedAt time.Time `yaml:"modifiedAt"`
@@ -19,4 +20,8 @@ func New(title string) Card {
 
 func (c Card) HasContent() bool {
 	return c.Content != ""
+}
+
+func (c Card) HasLink() bool {
+	return c.Link != ""
 }

@@ -216,6 +216,15 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			fs.WriteBoard(m.board)
 		}
 		return m, nil
+
+	case boardSwitchedMsg:
+		if msg.err != nil {
+			m.statusMessage = msg.err.Error()
+			return m, clearStatusCmd(4 * time.Second)
+		}
+		m.reInit(msg.board, &msg.state)
+		m.statusMessage = "Switched to board: " + msg.board.Path
+		return m, clearStatusCmd(2 * time.Second)
 	}
 
 	var cmd tea.Cmd
@@ -234,6 +243,56 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmd = m.updateNormalMode(msg)
 	}
 	return m, cmd
+}
+
+func (m *Model) reInit(b board.Board, state *fs.AppState) {
+	ti := textinput.New()
+	ti.Prompt = ":"
+
+	// Preserve window size
+	width, height := m.width, m.height
+
+	// Re-initialize the model struct
+	*m = Model{
+		width:             width,
+		height:            height,
+		board:             b,
+		mode:              normalMode,
+		textInput:         ti,
+		selected:          make(map[string]struct{}),
+		clipboard:         []card.Card{},
+		scrollOffset:      0,
+		createCardMode:    "prepend",
+		visualSelectStart: -1,
+		doneColumnName:    state.DoneColumn,
+		showHidden:        state.ShowHidden,
+		history:           history.New(),
+		searchResults:     []searchResult{},
+		fzf:               NewFZFModel(),
+		completionMatches:      []string{},
+		completionIndex:        -1,
+		currentSearchResultIdx: -1,
+	}
+
+	m.fzf.SetSize(m.width, m.height)
+	m.updateDisplayColumns()
+
+	m.columnCardFocus = make([]int, len(m.displayColumns))
+
+	if len(m.displayColumns) == 0 {
+		m.focusedColumn = 0
+	} else {
+		focusedColumn := state.FocusedColumn
+		if focusedColumn < 0 {
+			focusedColumn = 0
+		}
+		if focusedColumn >= len(m.displayColumns) {
+			focusedColumn = len(m.displayColumns) - 1
+		}
+		m.focusedColumn = focusedColumn
+		m.columnCardFocus[m.focusedColumn] = state.FocusedCard
+		m.clampFocusedCard()
+	}
 }
 
 func (m Model) View() string {

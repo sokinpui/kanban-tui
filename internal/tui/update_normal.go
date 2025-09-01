@@ -101,6 +101,20 @@ func (m *Model) updateNormalMode(msg tea.Msg) tea.Cmd {
 			m.ensureFocusedCardIsVisible()
 		}
 
+	case "f":
+		if time.Since(m.lastGPress) < 500*time.Millisecond { // gf
+			m.lastGPress = time.Time{} // Reset timer
+			currentFocus := m.currentFocusedCard()
+			if currentFocus > 0 {
+				crd := m.displayColumns[m.focusedColumn].Cards[currentFocus-1]
+				if crd.HasLink() {
+					return switchToBoardCmd(crd.Link)
+				}
+				m.statusMessage = "Card has no link"
+				return clearStatusCmd(2 * time.Second)
+			}
+		}
+
 	case "enter":
 		currentFocus := m.currentFocusedCard()
 		if currentFocus > 0 {

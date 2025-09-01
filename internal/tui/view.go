@@ -202,6 +202,10 @@ func renderCard(c card.Card, m *Model, columnIndex, cardIndex int, contentWidth 
 		}
 	}
 
+	if c.HasLink() {
+		title = "🔗 " + title
+	}
+
 	if c.HasContent() && !isSelected && m.mode != searchMode {
 		style = style.Foreground(lipgloss.Color("81"))
 	}
