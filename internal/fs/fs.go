@@ -141,34 +141,43 @@ func SetupMainBoard(kanbanFilePaths []string) error {
 		return err
 	}
 
-	var bufferCol, projectsCol *column.Column
-	for i := range board.Columns {
-		switch board.Columns[i].Title {
-		case "buffer":
-			bufferCol = &board.Columns[i]
-		case "projects":
-			projectsCol = &board.Columns[i]
+	madeChanges := false
+	var hasBuffer, hasProjects bool
+	for _, col := range board.Columns {
+		if col.Title == "buffer" {
+			hasBuffer = true
+		}
+		if col.Title == "projects" {
+			hasProjects = true
 		}
 	}
 
-	madeChanges := false
-	if bufferCol == nil {
+	if !hasBuffer {
 		newCol, err := CreateColumn("buffer")
 		if err != nil {
 			return err
 		}
 		board.Columns = append(board.Columns, newCol)
-		bufferCol = &board.Columns[len(board.Columns)-1]
 		madeChanges = true
 	}
-	if projectsCol == nil {
+	if !hasProjects {
 		newCol, err := CreateColumn("projects")
 		if err != nil {
 			return err
 		}
 		board.Columns = append(board.Columns, newCol)
-		projectsCol = &board.Columns[len(board.Columns)-1]
 		madeChanges = true
+	}
+
+	var bufferCol *column.Column
+	for i := range board.Columns {
+		if board.Columns[i].Title == "buffer" {
+			bufferCol = &board.Columns[i]
+			break
+		}
+	}
+	if bufferCol == nil {
+		return fmt.Errorf("internal error: buffer column not found after creation")
 	}
 
 	existingLinks := make(map[string]struct{})
