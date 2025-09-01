@@ -207,7 +207,8 @@ func SetupMainBoard(kanbanFilePaths []string) error {
 		}
 
 		if _, exists := existingLinks[absPath]; !exists {
-			newCard, err := CreateCard(*bufferCol, absPath)
+			cardTitle := filepath.Base(filepath.Dir(absPath))
+			newCard, err := CreateCard(*bufferCol, cardTitle)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "could not create card for %s: %v\n", absPath, err)
 				continue
