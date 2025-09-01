@@ -17,6 +17,8 @@ A terminal-based Kanban board application with a focus on a fast, Vim-like workf
 - Configurable "Done" column for quick card movement
 - Column creation, deletion, renaming, and reordering
 - Safe deletion via `trash-cli`
+- **Nested/Linked Boards**: Create cards that link to other `kanban.md` files and navigate between them seamlessly.
+- **Meta-Boards**: Aggregate multiple project boards into a single master view for high-level tracking.
 
 ## Dependencies
 
@@ -43,6 +45,18 @@ go install github.com/sokinpui/kanban-tui/cmd/kanban@latest
 Run `kanban` in any directory.
 
 If `kanban.md` is not found, the application will offer to create a sample board structure.
+
+### Meta-Boards (Master View)
+
+You can create a "meta-board" that aggregates cards from multiple other kanban projects. This is useful for a high-level overview.
+
+Run the following command in a directory where you want to create your master board:
+
+```sh
+kanban --main path/to/project1/kanban.md path/to/project2/kanban.md
+```
+
+This will create a board with `buffer` and `projects` columns and add cards that link to your specified project boards.
 
 ## File Structure
 
@@ -72,7 +86,7 @@ The application operates on a simple file-based structure.
 
 | Key          | Action                              |
 | ------------ | ----------------------------------- |
-| `q`, `C-c`   | Quit                                |
+| `q`, `C-c`   | Quit, or return to parent board     |
 | `h`, `left`  | Focus column to the left            |
 | `l`, `right` | Focus column to the right           |
 | `k`, `up`    | Focus card above, or column header  |
@@ -81,6 +95,7 @@ The application operates on a simple file-based structure.
 | `G`          | Focus last card in column           |
 | `/`          | Enter forward search mode           |
 | `?`          | Enter backward search mode          |
+| `gf`         | Go to file (follow link to board)   |
 | `n`          | Find next search result             |
 | `N`          | Find previous search result         |
 | `enter`      | Open focused card in `$EDITOR`      |
@@ -97,6 +112,7 @@ The application operates on a simple file-based structure.
 | `.`          | Repeat last command                 |
 | `:`          | Enter command mode                  |
 | `C-p`        | Open fuzzy finder                   |
+| `gf`         | Go to file (follow link in card)    |
 | `esc`        | Clear selection and clipboard       |
 
 ### Visual Mode
@@ -168,10 +184,10 @@ Commands are entered after pressing `:`. Tab completion is available.
 - `:right`
   Move focused column to the right.
 
-- `:sort {field} {direction}`
+- `:sort {field}[!`]`
   Sort cards in the focused column.
-  - `field`: `create` or `modify`
-  - `direction`: `asc` or `desc`
+  - `field`: `name` (default), `create`, `modify`, or `size`.
+  - `!`: Add `!` to the end of the command for descending order (e.g., `:sort create!`).
 
 ### Application & View Settings
 
