@@ -14,28 +14,40 @@ import (
 
 func main() {
 	if len(os.Args) > 1 {
-		targetPath := os.Args[1]
-		info, err := os.Stat(targetPath)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "error accessing path %s: %v\n", targetPath, err)
-			os.Exit(1)
-		}
-
-		var dir string
-		if info.IsDir() {
-			dir = targetPath
-		} else {
-			if filepath.Base(targetPath) == fs.BoardFileName {
-				dir = filepath.Dir(targetPath)
-			} else {
-				fmt.Fprintf(os.Stderr, "error: provided file must be named %s\n", fs.BoardFileName)
+		if os.Args[1] == "--main" {
+			if len(os.Args) < 3 {
+				fmt.Fprintln(os.Stderr, "error: --main requires at least one path argument")
 				os.Exit(1)
 			}
-		}
+			paths := os.Args[2:]
+			if err := fs.SetupMainBoard(paths); err != nil {
+				fmt.Fprintf(os.Stderr, "error setting up main board: %v\n", err)
+				os.Exit(1)
+			}
+		} else {
+			targetPath := os.Args[1]
+			info, err := os.Stat(targetPath)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "error accessing path %s: %v\n", targetPath, err)
+				os.Exit(1)
+			}
 
-		if err := os.Chdir(dir); err != nil {
-			fmt.Fprintf(os.Stderr, "error changing to directory %s: %v\n", dir, err)
-			os.Exit(1)
+			var dir string
+			if info.IsDir() {
+				dir = targetPath
+			} else {
+				if filepath.Base(targetPath) == fs.BoardFileName {
+					dir = filepath.Dir(targetPath)
+				} else {
+					fmt.Fprintf(os.Stderr, "error: provided file must be named %s\n", fs.BoardFileName)
+					os.Exit(1)
+				}
+			}
+
+			if err := os.Chdir(dir); err != nil {
+				fmt.Fprintf(os.Stderr, "error changing to directory %s: %v\n", dir, err)
+				os.Exit(1)
+			}
 		}
 	}
 

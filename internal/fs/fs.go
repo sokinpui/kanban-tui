@@ -131,6 +131,107 @@ func WriteBoard(b board.Board) error {
 	return os.WriteFile(BoardFileName, []byte(builder.String()), 0644)
 }
 
+func SetupMainBoard(kanbanFilePaths []string) error {
+	board, err := LoadBoard()
+	if err != nil {
+		return err
+	}
+
+	if err := os.Mkdir(DataDirName, 0755); err != nil && !os.IsExist(err) {
+		return err
+	}
+
+	var bufferCol, projectsCol *column.Column
+	for i := range board.Columns {
+		switch board.Columns[i].Title {
+		case "buffer":
+			bufferCol = &board.Columns[i]
+		case "projects":
+			projectsCol = &board.Columns[i]
+		}
+	}
+
+	madeChanges := false
+	if bufferCol == nil {
+		newCol, err := CreateColumn("buffer")
+		if err != nil {
+			return err
+		}
+		board.Columns = append(board.Columns, newCol)
+		bufferCol = &board.Columns[len(board.Columns)-1]
+		madeChanges = true
+	}
+	if projectsCol == nil {
+		newCol, err := CreateColumn("projects")
+		if err != nil {
+			return err
+		}
+		board.Columns = append(board.Columns, newCol)
+		projectsCol = &board.Columns[len(board.Columns)-1]
+		madeChanges = true
+	}
+
+	existingLinks := make(map[string]struct{})
+	for _, col := range board.Columns {
+		for _, card := range col.Cards {
+			if card.Link != "" {
+				existingLinks[card.Link] = struct{}{}
+			}
+		}
+	}
+
+	mainBoardDir, err := os.Getwd()
+	if err != nil {
+		return err
+	}
+	mainBoardDir, err = filepath.Abs(mainBoardDir)
+	if err != nil {
+		return err
+	}
+
+	newCardsAdded := false
+	for _, path := range kanbanFilePaths {
+		if filepath.Base(path) != BoardFileName {
+			fmt.Fprintf(os.Stderr, "warning: skipping file that is not named %s: %s\n", BoardFileName, path)
+			continue
+		}
+
+		absPath, err := filepath.Abs(path)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "could not get absolute path for %s: %v\n", path, err)
+			continue
+		}
+
+		if filepath.Dir(absPath) == mainBoardDir {
+			continue // Skip self
+		}
+
+		if _, exists := existingLinks[absPath]; !exists {
+			newCard, err := CreateCard(*bufferCol, absPath)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "could not create card for %s: %v\n", absPath, err)
+				continue
+			}
+			newCard.Link = absPath
+			if err := WriteCard(newCard); err != nil {
+				fmt.Fprintf(os.Stderr, "could not update card link for %s: %v\n", absPath, err)
+				continue
+			}
+
+			bufferCol.Cards = append(bufferCol.Cards, newCard)
+			newCardsAdded = true
+		}
+	}
+
+	if madeChanges || newCardsAdded {
+		if err := WriteBoard(board); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 func CreateSampleBoard(b *board.Board) error {
 	sampleCols := []string{"Notes", "Planned", "WIP", "Done"}
 	var columns []column.Column
