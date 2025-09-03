@@ -363,37 +363,46 @@ func (m *Model) deleteCards(cardsToDelete []card.Card) {
 		return
 	}
 
-	trashedUUIDs := make(map[string]struct{})
+	deletedUUIDs := make(map[string]struct{})
 	for _, c := range cardsToDelete {
-		if err := fs.TrashCard(c); err == nil {
-			trashedUUIDs[c.UUID] = struct{}{}
-		}
+		m.board.Trash = append(m.board.Trash, c)
+		deletedUUIDs[c.UUID] = struct{}{}
 	}
 
-	if len(trashedUUIDs) > 0 {
-		for i := range m.board.Columns {
-			col := &m.board.Columns[i]
-			keptCards := col.Cards[:0]
-			for _, c := range col.Cards {
-				if _, wasTrashed := trashedUUIDs[c.UUID]; !wasTrashed {
-					keptCards = append(keptCards, c)
-				}
-			}
-			col.Cards = keptCards
-		}
-
-		keptClipboard := m.clipboard[:0]
-		for _, c := range m.clipboard {
-			if _, wasTrashed := trashedUUIDs[c.UUID]; !wasTrashed {
-				keptClipboard = append(keptClipboard, c)
-			}
-		}
-		m.clipboard = keptClipboard
-
-		m.selected = make(map[string]struct{})
-		fs.WriteBoard(m.board)
-		m.clampFocusedCard()
+	if len(deletedUUIDs) == 0 {
+		return
 	}
+
+	for i := range m.board.Columns {
+		col := &m.board.Columns[i]
+		keptCards := col.Cards[:0]
+		for _, c := range col.Cards {
+			if _, wasDeleted := deletedUUIDs[c.UUID]; !wasDeleted {
+				keptCards = append(keptCards, c)
+			}
+		}
+		col.Cards = keptCards
+	}
+
+	keptArchived := m.board.Archived.Cards[:0]
+	for _, c := range m.board.Archived.Cards {
+		if _, wasDeleted := deletedUUIDs[c.UUID]; !wasDeleted {
+			keptArchived = append(keptArchived, c)
+		}
+	}
+	m.board.Archived.Cards = keptArchived
+
+	keptClipboard := m.clipboard[:0]
+	for _, c := range m.clipboard {
+		if _, wasDeleted := deletedUUIDs[c.UUID]; !wasDeleted {
+			keptClipboard = append(keptClipboard, c)
+		}
+	}
+	m.clipboard = keptClipboard
+
+	m.selected = make(map[string]struct{})
+	fs.WriteBoard(m.board)
+	m.clampFocusedCard()
 }
 
 func (m *Model) clampFocusedCard() {
@@ -765,4 +774,8 @@ func (m *Model) ExecuteCommand(commandStr string) tea.Cmd {
 	// Why: The command itself is responsible for saving state for undo,
 	// because not all commands are undoable (e.g., view changes).
 	return cmdInfo.execute(m, command, args)
+}
+
+func (m *Model) Cleanup() error {
+	return fs.FlushTrash(m.board.Trash)
 }

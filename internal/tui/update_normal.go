@@ -287,6 +287,7 @@ func (m *Model) updateNormalMode(msg tea.Msg) tea.Cmd {
 	case "u":
 		if newState, ok := m.history.Undo(m.board); ok {
 			m.board = newState
+			fs.WriteBoard(m.board)
 			m.updateAndResizeFocus()
 			m.statusMessage = "Undo successful"
 			return clearStatusCmd(2 * time.Second)
@@ -297,6 +298,7 @@ func (m *Model) updateNormalMode(msg tea.Msg) tea.Cmd {
 	case "ctrl+r":
 		if newState, ok := m.history.Redo(m.board); ok {
 			m.board = newState
+			fs.WriteBoard(m.board)
 			m.updateAndResizeFocus()
 			m.statusMessage = "Redo successful"
 			return clearStatusCmd(2 * time.Second)

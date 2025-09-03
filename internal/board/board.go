@@ -10,10 +10,11 @@ type Board struct {
 	Path    string
 	Columns []column.Column
 	Archived column.Column
+	Trash   []card.Card
 }
 
 func New(path string, columns []column.Column) Board {
-	return Board{Path: path, Columns: columns}
+	return Board{Path: path, Columns: columns, Trash: []card.Card{}}
 }
 
 func (b *Board) DeepCopy() Board {
@@ -36,6 +37,9 @@ func (b *Board) DeepCopy() Board {
 	newArchived.Cards = make([]card.Card, len(b.Archived.Cards))
 	copy(newArchived.Cards, b.Archived.Cards)
 	newBoard.Archived = newArchived
+
+	newBoard.Trash = make([]card.Card, len(b.Trash))
+	copy(newBoard.Trash, b.Trash)
 
 	return newBoard
 }

@@ -459,3 +459,17 @@ func LoadState() (AppState, error) {
 	}
 	return state, nil
 }
+
+func FlushTrash(trash []card.Card) error {
+	var firstErr error
+	for _, c := range trash {
+		err := TrashCard(c)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "could not trash card %s: %v\n", c.Path, err)
+			if firstErr == nil {
+				firstErr = err
+			}
+		}
+	}
+	return firstErr
+}

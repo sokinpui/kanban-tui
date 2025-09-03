@@ -98,6 +98,11 @@ func main() {
 	}
 
 	if m, ok := finalModel.(*tui.Model); ok {
+		if err := m.Cleanup(); err != nil {
+			// Don't exit on cleanup error, just warn and continue to save state
+			fmt.Fprintf(os.Stderr, "error during cleanup: %v\n", err)
+		}
+
 		s := m.State()
 		if err := fs.SaveState(s.FocusedColumn, s.FocusedCard, s.DoneColumn, s.ShowHidden); err != nil {
 			fmt.Fprintf(os.Stderr, "could not save state: %v\n", err)
