@@ -98,7 +98,7 @@ func (m *Model) updateVisualMode(msg tea.Msg) tea.Cmd {
 		m.selected = make(map[string]struct{})
 		m.visualSelectStart = -1
 
-	case "delete":
+	case "delete", "backspace":
 		var cardsToDelete []card.Card
 		if len(m.selected) > 0 {
 			for _, c := range m.displayColumns[m.focusedColumn].Cards {
