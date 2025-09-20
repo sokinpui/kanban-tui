@@ -7,6 +7,7 @@ type Card struct {
 	Path       string    `yaml:"-"`
 	Title      string    `yaml:"title"`
 	Link       string    `yaml:"link,omitempty"`
+	Header     bool      `yaml:"header"`
 	Content    string    `yaml:"-"`
 	CreatedAt  time.Time `yaml:"createdAt"`
 	ModifiedAt time.Time `yaml:"modifiedAt"`

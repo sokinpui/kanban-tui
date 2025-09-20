@@ -187,6 +187,8 @@ func renderCard(c card.Card, m *Model, columnIndex, cardIndex int, contentWidth 
 	var query string
 	if m.mode == searchMode {
 		query = m.textInput.Value()
+	} else {
+		query = m.lastSearchQuery
 	}
 	if query != "" {
 		lowerTitle := strings.ToLower(title)
@@ -206,7 +208,9 @@ func renderCard(c card.Card, m *Model, columnIndex, cardIndex int, contentWidth 
 		title = "🔗 " + title
 	}
 
-	if c.HasContent() && !isSelected && m.mode != searchMode {
+	if c.Header {
+		style = style.Bold(true).Foreground(lipgloss.Color("220"))
+	} else if c.HasContent() && !isSelected && m.mode != searchMode {
 		style = style.Foreground(lipgloss.Color("81"))
 	}
 
