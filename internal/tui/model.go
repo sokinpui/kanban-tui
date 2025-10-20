@@ -89,6 +89,16 @@ func NewModel(b board.Board, state *fs.AppState) Model {
 	ti := textinput.New()
 	ti.Prompt = ":"
 
+	doneColumn := state.DoneColumn
+	if doneColumn == "" {
+		for _, col := range b.Columns {
+			if strings.ToLower(col.Title) == "done" {
+				doneColumn = col.Title
+				break
+			}
+		}
+	}
+
 	m := Model{
 		board:             b,
 		boardStack:        []boardSession{},
@@ -99,7 +109,7 @@ func NewModel(b board.Board, state *fs.AppState) Model {
 		scrollOffset:      0,
 		createCardMode:    "prepend",
 		visualSelectStart: -1,
-		doneColumnName:    state.DoneColumn,
+		doneColumnName:    doneColumn,
 		showHidden:        state.ShowHidden,
 		history:           history.New(),
 		searchResults:     []searchResult{},
