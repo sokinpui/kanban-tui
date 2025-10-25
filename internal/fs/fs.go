@@ -473,3 +473,62 @@ func FlushTrash(trash []card.Card) error {
 	}
 	return firstErr
 }
+
+// SynchronizeBoard ensures that the filesystem state matches the board state.
+// It moves card files to their correct locations as defined in the board struct.
+// This is useful after an undo/redo operation to ensure consistency.
+func SynchronizeBoard(b board.Board) error {
+	// Create a map of all card UUIDs to their correct paths from the board state.
+	expectedPaths := make(map[string]string)
+
+	allCols := make([]column.Column, 0, len(b.Columns)+1)
+	allCols = append(allCols, b.Columns...)
+	if b.Archived.CardCount() > 0 {
+		allCols = append(allCols, b.Archived)
+	}
+
+	for _, col := range allCols {
+		// Ensure column directory exists
+		if err := os.MkdirAll(col.Path, 0755); err != nil {
+			return fmt.Errorf("could not create directory for column '%s': %w", col.Title, err)
+		}
+		for _, card := range col.Cards {
+			expectedPaths[card.UUID] = card.Path
+		}
+	}
+
+	// Scan the .kanban directory to find the actual locations of card files.
+	actualPaths := make(map[string]string)
+	err := filepath.Walk(DataDirName, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() && strings.HasSuffix(info.Name(), ".md") {
+			cardUUID := strings.TrimSuffix(info.Name(), ".md")
+			if _, err := uuid.Parse(cardUUID); err == nil {
+				actualPaths[cardUUID] = path
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("could not scan for cards: %w", err)
+	}
+
+	// Move files that are in the wrong place.
+	for cardUUID, actualPath := range actualPaths {
+		if expectedPath, ok := expectedPaths[cardUUID]; ok {
+			if actualPath != expectedPath {
+				if err := os.Rename(actualPath, expectedPath); err != nil {
+					if os.IsNotExist(err) {
+						if _, statErr := os.Stat(expectedPath); statErr == nil {
+							continue
+						}
+					}
+					return fmt.Errorf("could not move card %s from %s to %s: %w", cardUUID, actualPath, expectedPath, err)
+				}
+			}
+		}
+	}
+	return nil
+}

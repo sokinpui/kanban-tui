@@ -2,6 +2,7 @@
 package tui
 
 import (
+	"fmt"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -286,6 +287,10 @@ func (m *Model) updateNormalMode(msg tea.Msg) tea.Cmd {
 
 	case "u":
 		if newState, ok := m.history.Undo(m.board); ok {
+			if err := fs.SynchronizeBoard(newState); err != nil {
+				m.statusMessage = fmt.Sprintf("Undo failed: %v", err)
+				return clearStatusCmd(5 * time.Second)
+			}
 			m.board = newState
 			fs.WriteBoard(m.board)
 			m.updateAndResizeFocus()
@@ -297,6 +302,10 @@ func (m *Model) updateNormalMode(msg tea.Msg) tea.Cmd {
 
 	case "ctrl+r":
 		if newState, ok := m.history.Redo(m.board); ok {
+			if err := fs.SynchronizeBoard(newState); err != nil {
+				m.statusMessage = fmt.Sprintf("Redo failed: %v", err)
+				return clearStatusCmd(5 * time.Second)
+			}
 			m.board = newState
 			fs.WriteBoard(m.board)
 			m.updateAndResizeFocus()
