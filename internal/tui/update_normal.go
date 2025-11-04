@@ -6,8 +6,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"kanban/internal/card"
-	"kanban/internal/fs"
+	"kanban/internal/models"
 )
 
 func (m *Model) updateNormalMode(msg tea.Msg) tea.Cmd {
@@ -22,14 +21,11 @@ func (m *Model) updateNormalMode(msg tea.Msg) tea.Cmd {
 
 	switch keyMsg.String() {
 	case "q", "ctrl+c":
-		if len(m.boardStack) > 0 {
-			return m.popBoard()
-		}
 		return tea.Quit
 
 	case "esc":
 		m.selected = make(map[string]struct{})
-		m.clipboard = []card.Card{}
+		m.clipboard = []models.Card{}
 		m.isCut = false
 
 	case ":":
@@ -106,18 +102,7 @@ func (m *Model) updateNormalMode(msg tea.Msg) tea.Cmd {
 		}
 
 	case "f":
-		if time.Since(m.lastGPress) < 500*time.Millisecond { // gf
-			m.lastGPress = time.Time{} // Reset timer
-			currentFocus := m.currentFocusedCard()
-			if currentFocus > 0 {
-				crd := m.displayColumns[m.focusedColumn].Cards[currentFocus-1]
-				if crd.HasLink() {
-					return switchToBoardCmd(crd.Link)
-				}
-				m.statusMessage = "Card has no link"
-				return clearStatusCmd(2 * time.Second)
-			}
-		}
+		// gf (go to file) is disabled in client-server architecture.
 
 	case "enter":
 		currentFocus := m.currentFocusedCard()
@@ -152,7 +137,7 @@ func (m *Model) updateNormalMode(msg tea.Msg) tea.Cmd {
 		if time.Since(m.lastYPress) < 500*time.Millisecond { // yy
 			currentFocus := m.currentFocusedCard()
 			if currentFocus > 0 {
-				m.clipboard = []card.Card{m.displayColumns[m.focusedColumn].Cards[currentFocus-1]}
+				m.clipboard = []models.Card{m.displayColumns[m.focusedColumn].Cards[currentFocus-1]}
 				m.isCut = false
 				m.selected = make(map[string]struct{})
 			}
@@ -165,7 +150,7 @@ func (m *Model) updateNormalMode(msg tea.Msg) tea.Cmd {
 		if time.Since(m.lastDPress) < 500*time.Millisecond { // dd
 			currentFocus := m.currentFocusedCard()
 			if currentFocus > 0 {
-				m.clipboard = []card.Card{m.displayColumns[m.focusedColumn].Cards[currentFocus-1]}
+				m.clipboard = []models.Card{m.displayColumns[m.focusedColumn].Cards[currentFocus-1]}
 				m.isCut = true
 				m.selected = make(map[string]struct{})
 			}
@@ -201,7 +186,7 @@ func (m *Model) updateNormalMode(msg tea.Msg) tea.Cmd {
 			for i := range m.clipboard {
 				c := &m.clipboard[i]
 				clipboardUUIDs[c.UUID] = struct{}{}
-				fs.MoveCard(c, *destCol)
+				m.client.MoveCard(c, *destCol)
 			}
 
 			// Remove cut cards from all columns that are NOT the destination.
@@ -210,7 +195,7 @@ func (m *Model) updateNormalMode(msg tea.Msg) tea.Cmd {
 				if col.Title == destCol.Title {
 					continue
 				}
-				keptCards := make([]card.Card, 0, len(col.Cards))
+				keptCards := make([]models.Card, 0, len(col.Cards))
 				for _, c := range col.Cards {
 					if _, isCut := clipboardUUIDs[c.UUID]; !isCut {
 						keptCards = append(keptCards, c)
@@ -219,7 +204,7 @@ func (m *Model) updateNormalMode(msg tea.Msg) tea.Cmd {
 				col.Cards = keptCards
 			}
 			if m.board.Archived.Title != destCol.Title {
-				keptArchived := make([]card.Card, 0, len(m.board.Archived.Cards))
+				keptArchived := make([]models.Card, 0, len(m.board.Archived.Cards))
 				for _, c := range m.board.Archived.Cards {
 					if _, isCut := clipboardUUIDs[c.UUID]; !isCut {
 						keptArchived = append(keptArchived, c)
@@ -230,7 +215,7 @@ func (m *Model) updateNormalMode(msg tea.Msg) tea.Cmd {
 
 			// Rebuild the destination column's card list, inserting the clipboard.
 			// This correctly handles cutting and pasting within the same column.
-			newDestCards := make([]card.Card, 0, len(destCol.Cards)+len(m.clipboard))
+			newDestCards := make([]models.Card, 0, len(destCol.Cards)+len(m.clipboard))
 
 			for i := 0; i < insertIndex; i++ {
 				c := destCol.Cards[i]
@@ -249,9 +234,9 @@ func (m *Model) updateNormalMode(msg tea.Msg) tea.Cmd {
 			}
 			destCol.Cards = newDestCards
 		} else {
-			var newCards []card.Card
+			var newCards []models.Card
 			for _, c := range m.clipboard {
-				newCard, err := fs.CopyCard(c, *destCol)
+				newCard, err := m.client.CopyCard(c, *destCol)
 				if err == nil {
 					newCards = append(newCards, newCard)
 				}
@@ -261,12 +246,12 @@ func (m *Model) updateNormalMode(msg tea.Msg) tea.Cmd {
 			}
 		}
 		m.isCut = false
-		m.clipboard = []card.Card{}
+		m.clipboard = []models.Card{}
 		m.clampFocusedCard()
 		m.ensureFocusedCardIsVisible()
 
 	case "delete", "backspace":
-		var cardsToDelete []card.Card
+		var cardsToDelete []models.Card
 		if len(m.selected) > 0 {
 			for _, col := range m.board.Columns {
 				for _, c := range col.Cards {
@@ -287,12 +272,12 @@ func (m *Model) updateNormalMode(msg tea.Msg) tea.Cmd {
 
 	case "u":
 		if newState, ok := m.history.Undo(m.board); ok {
-			if err := fs.SynchronizeBoard(newState); err != nil {
+			if err := m.client.SynchronizeBoard(newState); err != nil {
 				m.statusMessage = fmt.Sprintf("Undo failed: %v", err)
 				return clearStatusCmd(5 * time.Second)
 			}
 			m.board = newState
-			fs.WriteBoard(m.board)
+			m.client.WriteBoard(m.board)
 			m.updateAndResizeFocus()
 			m.statusMessage = "Undo successful"
 			return clearStatusCmd(2 * time.Second)
@@ -302,12 +287,12 @@ func (m *Model) updateNormalMode(msg tea.Msg) tea.Cmd {
 
 	case "ctrl+r":
 		if newState, ok := m.history.Redo(m.board); ok {
-			if err := fs.SynchronizeBoard(newState); err != nil {
+			if err := m.client.SynchronizeBoard(newState); err != nil {
 				m.statusMessage = fmt.Sprintf("Redo failed: %v", err)
 				return clearStatusCmd(5 * time.Second)
 			}
 			m.board = newState
-			fs.WriteBoard(m.board)
+			m.client.WriteBoard(m.board)
 			m.updateAndResizeFocus()
 			m.statusMessage = "Redo successful"
 			return clearStatusCmd(2 * time.Second)

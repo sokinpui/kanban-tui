@@ -1,4 +1,4 @@
-package card
+package models
 
 import "time"
 
@@ -14,7 +14,7 @@ type Card struct {
 	Size       int64     `yaml:"-"` // File size in bytes
 }
 
-func New(title string) Card {
+func NewCard(title string) Card {
 	now := time.Now()
 	return Card{Title: title, CreatedAt: now, ModifiedAt: now}
 }

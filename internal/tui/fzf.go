@@ -10,14 +10,14 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/sahilm/fuzzy"
-	"kanban/internal/card"
+	"kanban/internal/models"
 )
 
-type fzfCardSelectedMsg struct{ card card.Card }
+type fzfCardSelectedMsg struct{ card models.Card }
 type fzfCancelledMsg struct{}
 
 type FzfItem struct {
-	Card     card.Card
+	Card     models.Card
 	ColTitle string
 }
 

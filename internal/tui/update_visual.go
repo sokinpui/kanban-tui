@@ -5,7 +5,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"kanban/internal/card"
+	"kanban/internal/models"
 )
 
 func (m *Model) updateVisualMode(msg tea.Msg) tea.Cmd {
@@ -72,7 +72,7 @@ func (m *Model) updateVisualMode(msg tea.Msg) tea.Cmd {
 
 	case "y":
 		if len(m.selected) > 0 {
-			m.clipboard = []card.Card{}
+			m.clipboard = []models.Card{}
 			m.isCut = false
 			for _, c := range m.displayColumns[m.focusedColumn].Cards {
 				if _, ok := m.selected[c.UUID]; ok {
@@ -86,7 +86,7 @@ func (m *Model) updateVisualMode(msg tea.Msg) tea.Cmd {
 
 	case "d":
 		if len(m.selected) > 0 {
-			m.clipboard = []card.Card{}
+			m.clipboard = []models.Card{}
 			m.isCut = true
 			for _, c := range m.displayColumns[m.focusedColumn].Cards {
 				if _, ok := m.selected[c.UUID]; ok {
@@ -99,7 +99,7 @@ func (m *Model) updateVisualMode(msg tea.Msg) tea.Cmd {
 		m.visualSelectStart = -1
 
 	case "delete", "backspace":
-		var cardsToDelete []card.Card
+		var cardsToDelete []models.Card
 		if len(m.selected) > 0 {
 			for _, c := range m.displayColumns[m.focusedColumn].Cards {
 				if _, isSelected := m.selected[c.UUID]; isSelected {

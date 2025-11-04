@@ -1,14 +1,12 @@
-package column
-
-import "kanban/internal/card"
+package models
 
 type Column struct {
 	Title string
 	Path  string
-	Cards []card.Card
+	Cards []Card
 }
 
-func New(title, path string, cards ...card.Card) Column {
+func NewColumn(title, path string, cards ...Card) Column {
 	return Column{
 		Title: title,
 		Path:  path,

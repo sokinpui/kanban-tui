@@ -9,9 +9,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"kanban/internal/card"
-	"kanban/internal/column"
-	"kanban/internal/fs"
+	"kanban/internal/models"
 )
 
 type commandInfo struct {
@@ -78,10 +76,6 @@ func init() {
 
 func cmdQuit(m *Model, command, args string) tea.Cmd {
 	m.history.Drop()
-
-	if len(m.boardStack) > 0 {
-		return m.popBoard()
-	}
 	return tea.Quit
 }
 
@@ -94,7 +88,7 @@ func cmdNew(m *Model, command, args string) tea.Cmd {
 	title := args
 	currentCol := m.displayColumns[m.focusedColumn]
 
-	newCard, err := fs.CreateCard(*currentCol, title)
+	newCard, err := m.client.CreateCard(*currentCol, title)
 	if err != nil {
 		return nil
 	}
@@ -121,9 +115,9 @@ func cmdNew(m *Model, command, args string) tea.Cmd {
 		insertIndex = len(currentCol.Cards)
 	}
 
-	currentCol.Cards = append(currentCol.Cards[:insertIndex], append([]card.Card{newCard}, currentCol.Cards[insertIndex:]...)...)
+	currentCol.Cards = append(currentCol.Cards[:insertIndex], append([]models.Card{newCard}, currentCol.Cards[insertIndex:]...)...)
 
-	if err := fs.WriteBoard(m.board); err != nil {
+	if err := m.client.WriteBoard(m.board); err != nil {
 		return nil
 	}
 	m.setCurrentFocusedCard(insertIndex + 1)
@@ -174,7 +168,7 @@ func cmdSort(m *Model, command, args string) tea.Cmd {
 		return less
 	})
 
-	fs.WriteBoard(m.board)
+	m.client.WriteBoard(m.board)
 	m.setCurrentFocusedCard(0)
 	m.ensureFocusedCardIsVisible()
 	return nil
@@ -187,7 +181,7 @@ func cmdCreateColumn(m *Model, command, args string) tea.Cmd {
 		m.history.Drop()
 		return nil
 	}
-	newCol, err := fs.CreateColumn(name)
+	newCol, err := m.client.CreateColumn(name)
 	if err != nil {
 		m.history.Drop()
 		m.statusMessage = fmt.Sprintf("Error creating column: %v", err)
@@ -195,7 +189,7 @@ func cmdCreateColumn(m *Model, command, args string) tea.Cmd {
 	}
 	m.board.Columns = append(m.board.Columns, newCol)
 	m.updateAndResizeFocus()
-	fs.WriteBoard(m.board)
+	m.client.WriteBoard(m.board)
 	m.focusedColumn = len(m.displayColumns) - 1
 	return nil
 }
@@ -225,13 +219,13 @@ func cmdRenameColumn(m *Model, command, args string) tea.Cmd {
 	colToRename := m.displayColumns[m.focusedColumn]
 	oldName := colToRename.Title
 
-	if oldName == fs.ArchiveColumnName {
+	if oldName == "Archived" { // fs.ArchiveColumnName
 		m.history.Drop()
 		m.statusMessage = "Cannot rename the Archived column"
 		return clearStatusCmd(3 * time.Second)
 	}
 
-	if err := fs.RenameColumn(colToRename, newName); err != nil {
+	if err := m.client.RenameColumn(colToRename, newName); err != nil {
 		m.history.Drop()
 		m.statusMessage = fmt.Sprintf("Error renaming column: %v", err)
 		return clearStatusCmd(5 * time.Second)
@@ -241,7 +235,7 @@ func cmdRenameColumn(m *Model, command, args string) tea.Cmd {
 		m.doneColumnName = newName
 	}
 
-	fs.WriteBoard(m.board)
+	m.client.WriteBoard(m.board)
 	m.statusMessage = fmt.Sprintf("Renamed column '%s' to '%s'", oldName, newName)
 	return clearStatusCmd(3 * time.Second)
 }
@@ -254,14 +248,14 @@ func cmdDeleteColumn(m *Model, command, args string) tea.Cmd {
 	}
 
 	colToDelete := m.board.Columns[m.focusedColumn]
-	if err := fs.DeleteColumn(colToDelete); err != nil {
+	if err := m.client.DeleteColumn(colToDelete); err != nil {
 		m.history.Drop()
 		m.statusMessage = fmt.Sprintf("Error deleting column: %v", err)
 		return clearStatusCmd(3 * time.Second)
 	}
 
-	if colToDelete.Title != fs.ArchiveColumnName {
-		var newCols []column.Column
+	if colToDelete.Title != "Archived" { // fs.ArchiveColumnName
+		var newCols []models.Column
 		for _, c := range m.board.Columns {
 			if c.Title != colToDelete.Title {
 				newCols = append(newCols, c)
@@ -269,11 +263,11 @@ func cmdDeleteColumn(m *Model, command, args string) tea.Cmd {
 		}
 		m.board.Columns = newCols
 	} else {
-		m.board.Archived.Cards = []card.Card{}
+		m.board.Archived.Cards = []models.Card{}
 	}
 
 	m.updateAndResizeFocus()
-	fs.WriteBoard(m.board)
+	m.client.WriteBoard(m.board)
 	return nil
 }
 
@@ -293,9 +287,9 @@ func cmdArchive(m *Model, command, args string) tea.Cmd {
 	}
 
 	cardsToArchive := m.getSelectedOrFocusedCards()
-	movedCards := make([]card.Card, 0, len(cardsToArchive))
+	movedCards := make([]models.Card, 0, len(cardsToArchive))
 	for _, c := range cardsToArchive {
-		err := fs.MoveCard(c, m.board.Archived)
+		err := m.client.MoveCard(c, m.board.Archived)
 		if err == nil {
 			movedCards = append(movedCards, *c)
 		}
@@ -313,7 +307,7 @@ func cmdArchive(m *Model, command, args string) tea.Cmd {
 		col.Cards = keptCards
 	}
 
-	fs.WriteBoard(m.board)
+	m.client.WriteBoard(m.board)
 
 	m.clearSelection()
 	m.updateAndResizeFocus()
@@ -360,7 +354,7 @@ func cmdDone(m *Model, command, args string) tea.Cmd {
 		return nil
 	}
 
-	var destCol *column.Column
+	var destCol *models.Column
 	for i := range m.board.Columns {
 		if m.board.Columns[i].Title == m.doneColumnName {
 			destCol = &m.board.Columns[i]
@@ -379,7 +373,7 @@ func cmdDone(m *Model, command, args string) tea.Cmd {
 	}
 
 	m.moveCards(cardsToMove, destCol)
-	fs.WriteBoard(m.board)
+	m.client.WriteBoard(m.board)
 	m.clearSelection()
 	m.clampFocusedCard()
 	return nil
@@ -397,7 +391,7 @@ func cmdHide(m *Model, command, args string) tea.Cmd {
 	if args == "hidden" {
 		if m.focusedColumn < len(m.displayColumns) {
 			focusedColTitle := m.displayColumns[m.focusedColumn].Title
-			if focusedColTitle == fs.ArchiveColumnName {
+			if focusedColTitle == "Archived" { // fs.ArchiveColumnName
 				m.focusedColumn = 0
 			}
 		}
@@ -413,7 +407,7 @@ func cmdMoveColumnRight(m *Model, command, args string) tea.Cmd {
 		m.history.Drop()
 		return nil
 	}
-	if m.displayColumns[m.focusedColumn].Title == fs.ArchiveColumnName {
+	if m.displayColumns[m.focusedColumn].Title == "Archived" { // fs.ArchiveColumnName
 		m.history.Drop()
 		return nil
 	}
@@ -421,7 +415,7 @@ func cmdMoveColumnRight(m *Model, command, args string) tea.Cmd {
 	i := m.focusedColumn
 	m.board.Columns[i], m.board.Columns[i+1] = m.board.Columns[i+1], m.board.Columns[i]
 	m.focusedColumn++
-	fs.WriteBoard(m.board)
+	m.client.WriteBoard(m.board)
 	m.updateAndResizeFocus()
 	m.statusMessage = "Moved column right"
 	return clearStatusCmd(2 * time.Second)
@@ -433,7 +427,7 @@ func cmdMoveColumnLeft(m *Model, command, args string) tea.Cmd {
 		m.history.Drop()
 		return nil
 	}
-	if m.displayColumns[m.focusedColumn].Title == fs.ArchiveColumnName {
+	if m.displayColumns[m.focusedColumn].Title == "Archived" { // fs.ArchiveColumnName
 		m.history.Drop()
 		return nil
 	}
@@ -441,7 +435,7 @@ func cmdMoveColumnLeft(m *Model, command, args string) tea.Cmd {
 	i := m.focusedColumn
 	m.board.Columns[i], m.board.Columns[i-1] = m.board.Columns[i-1], m.board.Columns[i]
 	m.focusedColumn--
-	fs.WriteBoard(m.board)
+	m.client.WriteBoard(m.board)
 	m.updateAndResizeFocus()
 	m.statusMessage = "Moved column left"
 	return clearStatusCmd(2 * time.Second)

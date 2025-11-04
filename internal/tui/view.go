@@ -8,9 +8,8 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
-	"kanban/internal/card"
-	"kanban/internal/column"
-	"kanban/internal/fs"
+	"kanban/internal/core"
+	"kanban/internal/models"
 )
 
 var (
@@ -123,7 +122,7 @@ func renderBoard(m *Model, height int) string {
 	return lipgloss.JoinHorizontal(lipgloss.Top, parts...)
 }
 
-func renderColumn(c column.Column, m *Model, columnIndex int, width int, height int) string {
+func renderColumn(c models.Column, m *Model, columnIndex int, width int, height int) string {
 	isColumnFocused := m.focusedColumn == columnIndex
 	isHeaderFocused := isColumnFocused && m.currentFocusedCard() == 0
 
@@ -166,7 +165,7 @@ func renderColumn(c column.Column, m *Model, columnIndex int, width int, height 
 	return columnStyle.Copy().Width(width).Height(height).Render(columnContent)
 }
 
-func renderCard(c card.Card, m *Model, columnIndex, cardIndex int, contentWidth int) string {
+func renderCard(c models.Card, m *Model, columnIndex, cardIndex int, contentWidth int) string {
 	isFocused := m.focusedColumn == columnIndex && m.currentFocusedCard() == cardIndex+1
 	_, isSelected := m.selected[c.UUID]
 	isMarkedForCut := m.isCardMarkedForCut(c.UUID)
@@ -251,7 +250,7 @@ func renderStatusBar(m *Model) string {
 
 	renderedMode := modeStyle.Render(modeStr)
 
-	fullPath := filepath.Join(m.board.Path, fs.BoardFileName)
+	fullPath := filepath.Join(m.board.Path, core.BoardFileName)
 	displayPath := fullPath
 	home, err := os.UserHomeDir()
 	if err == nil && strings.HasPrefix(fullPath, home) {

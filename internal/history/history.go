@@ -1,22 +1,22 @@
 package history
 
-import "kanban/internal/board"
+import "kanban/internal/models"
 
 const maxHistorySize = 100
 
 type History struct {
-	undoStack []board.Board
-	redoStack []board.Board
+	undoStack []models.Board
+	redoStack []models.Board
 }
 
 func New() *History {
 	return &History{
-		undoStack: make([]board.Board, 0, maxHistorySize),
-		redoStack: make([]board.Board, 0, maxHistorySize),
+		undoStack: make([]models.Board, 0, maxHistorySize),
+		redoStack: make([]models.Board, 0, maxHistorySize),
 	}
 }
 
-func (h *History) Push(b board.Board) {
+func (h *History) Push(b models.Board) {
 	if len(h.undoStack) >= maxHistorySize {
 		h.undoStack = h.undoStack[1:]
 	}
@@ -24,9 +24,9 @@ func (h *History) Push(b board.Board) {
 	h.redoStack = h.redoStack[:0]
 }
 
-func (h *History) Undo(current board.Board) (board.Board, bool) {
+func (h *History) Undo(current models.Board) (models.Board, bool) {
 	if len(h.undoStack) == 0 {
-		return board.Board{}, false
+		return models.Board{}, false
 	}
 
 	previousState := h.undoStack[len(h.undoStack)-1]
@@ -40,9 +40,9 @@ func (h *History) Undo(current board.Board) (board.Board, bool) {
 	return previousState, true
 }
 
-func (h *History) Redo(current board.Board) (board.Board, bool) {
+func (h *History) Redo(current models.Board) (models.Board, bool) {
 	if len(h.redoStack) == 0 {
-		return board.Board{}, false
+		return models.Board{}, false
 	}
 
 	nextState := h.redoStack[len(h.redoStack)-1]

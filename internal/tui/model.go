@@ -5,16 +5,14 @@ import (
 	"fmt"
 	"strings"
 	"time"
-	"os"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"kanban/internal/board"
-	"kanban/internal/card"
-	"kanban/internal/column"
+	"kanban/internal/client"
+	"kanban/internal/core"
 	"kanban/internal/history"
-	"kanban/internal/fs"
+	"kanban/internal/models"
 )
 
 type clearStatusMsg struct{}
@@ -40,21 +38,12 @@ type searchResult struct {
 	cardIndex int // 1-based, like focus
 }
 
-type boardSession struct {
-	board           board.Board
-	focusedColumn   int
-	columnCardFocus []int
-	scrollOffset    int
-	doneColumnName  string
-	showHidden      bool
-}
-
 type Model struct {
-	board             board.Board
-	// boardStack allows navigating into linked boards and returning.
-	boardStack        []boardSession
+	client            *client.Client
+	board             models.Board
+	program           *tea.Program
 
-	displayColumns    []*column.Column
+	displayColumns    []*models.Column
 	focusedColumn     int
 	columnCardFocus   []int
 	mode              mode
@@ -62,7 +51,7 @@ type Model struct {
 	width             int
 	height            int
 	selected          map[string]struct{}
-	clipboard         []card.Card
+	clipboard         []models.Card
 	isCut             bool
 	scrollOffset      int
 	createCardMode    string
@@ -85,7 +74,7 @@ type Model struct {
 	currentSearchResultIdx int
 }
 
-func NewModel(b board.Board, state *fs.AppState) Model {
+func NewModel(c *client.Client, b models.Board, state *core.AppState) Model {
 	ti := textinput.New()
 	ti.Prompt = ":"
 
@@ -100,12 +89,12 @@ func NewModel(b board.Board, state *fs.AppState) Model {
 	}
 
 	m := Model{
+		client:            c,
 		board:             b,
-		boardStack:        []boardSession{},
 		mode:              normalMode,
 		textInput:         ti,
 		selected:          make(map[string]struct{}),
-		clipboard:         []card.Card{},
+		clipboard:         []models.Card{},
 		scrollOffset:      0,
 		createCardMode:    "prepend",
 		visualSelectStart: -1,
@@ -141,7 +130,7 @@ func NewModel(b board.Board, state *fs.AppState) Model {
 }
 
 func (m *Model) updateDisplayColumns() {
-	m.displayColumns = make([]*column.Column, len(m.board.Columns))
+	m.displayColumns = make([]*models.Column, len(m.board.Columns))
 	for i := range m.board.Columns {
 		m.displayColumns[i] = &m.board.Columns[i]
 	}
@@ -151,8 +140,8 @@ func (m *Model) updateDisplayColumns() {
 	}
 }
 
-func (m Model) State() fs.AppState {
-	return fs.AppState{
+func (m Model) State() core.AppState {
+	return core.AppState{
 		FocusedColumn: m.FocusedColumn(),
 		FocusedCard:   m.FocusedCard(),
 		DoneColumn:    m.doneColumnName,
@@ -184,8 +173,13 @@ func (m *Model) setCurrentFocusedCard(focus int) {
 	}
 }
 
+func (m *Model) SetProgram(p *tea.Program) {
+	m.program = p
+}
+
 func (m *Model) Init() tea.Cmd {
-	return nil
+	m.client.ConnectWebSocket(m.program)
+	return textinput.Blink
 }
 
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -196,6 +190,15 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.fzf.SetSize(m.width, m.height)
 		m.textInput.Width = m.width
 		m.ensureFocusedCardIsVisible()
+		return m, nil
+
+	case client.BoardRefreshedMsg:
+		m.board = msg.Board
+		m.updateAndResizeFocus()
+		return m, nil
+
+	case client.ServerErrorMsg:
+		m.statusMessage = fmt.Sprintf("Server Error: %v", msg.Err)
 		return m, nil
 
 	case fzfCardSelectedMsg:
@@ -233,48 +236,13 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		currentFocus := m.currentFocusedCard()
 		if currentFocus > 0 {
-			updatedCard, err := fs.LoadCard(msg.path)
+			updatedCard, err := m.client.LoadCard(msg.path)
 			if err != nil {
 				return m, nil
 			}
 			m.displayColumns[m.focusedColumn].Cards[currentFocus-1] = updatedCard
-			fs.WriteBoard(m.board)
+			// No need to WriteBoard, server handles it and will push an update.
 		}
-		return m, nil
-
-	case boardSwitchedMsg:
-		if msg.err != nil {
-			m.statusMessage = msg.err.Error()
-			return m, clearStatusCmd(4 * time.Second)
-		}
-
-		// Why: Save the state of the current board before navigating away.
-		currentState := m.State()
-		if err := fs.SaveState(currentState.FocusedColumn, currentState.FocusedCard, currentState.DoneColumn, currentState.ShowHidden); err != nil {
-			m.statusMessage = fmt.Sprintf("Error saving state: %v", err)
-			return m, clearStatusCmd(4 * time.Second)
-		}
-
-		session := boardSession{
-			board:           m.board,
-			focusedColumn:   m.focusedColumn,
-			columnCardFocus: m.columnCardFocus,
-			scrollOffset:    m.scrollOffset,
-			doneColumnName:  m.doneColumnName,
-			showHidden:      m.showHidden,
-		}
-		m.boardStack = append(m.boardStack, session)
-
-		if err := os.Chdir(msg.path); err != nil {
-			// If we can't change directory, we can't proceed. Roll back the stack push.
-			m.boardStack = m.boardStack[:len(m.boardStack)-1]
-			m.statusMessage = fmt.Sprintf("Error changing directory: %v", err)
-			return m, clearStatusCmd(4 * time.Second)
-		}
-
-		m.reInit(msg.board, &msg.state)
-		m.statusMessage = "Switched to board: " + msg.board.Path
-		return m, clearStatusCmd(2 * time.Second)
 	}
 
 	var cmd tea.Cmd
@@ -293,58 +261,6 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmd = m.updateNormalMode(msg)
 	}
 	return m, cmd
-}
-
-func (m *Model) reInit(b board.Board, state *fs.AppState) {
-	ti := textinput.New()
-	ti.Prompt = ":"
-
-	// Preserve window size
-	width, height := m.width, m.height
-	boardStack := m.boardStack
-
-	// Re-initialize the model struct
-	*m = Model{
-		width:             width,
-		height:            height,
-		boardStack:        boardStack,
-		board:             b,
-		mode:              normalMode,
-		textInput:         ti,
-		selected:          make(map[string]struct{}),
-		clipboard:         []card.Card{},
-		scrollOffset:      0,
-		createCardMode:    "prepend",
-		visualSelectStart: -1,
-		doneColumnName:    state.DoneColumn,
-		showHidden:        state.ShowHidden,
-		history:           history.New(),
-		searchResults:     []searchResult{},
-		fzf:               NewFZFModel(),
-		completionMatches:      []string{},
-		completionIndex:        -1,
-		currentSearchResultIdx: -1,
-	}
-
-	m.fzf.SetSize(m.width, m.height)
-	m.updateDisplayColumns()
-
-	m.columnCardFocus = make([]int, len(m.displayColumns))
-
-	if len(m.displayColumns) == 0 {
-		m.focusedColumn = 0
-	} else {
-		focusedColumn := state.FocusedColumn
-		if focusedColumn < 0 {
-			focusedColumn = 0
-		}
-		if focusedColumn >= len(m.displayColumns) {
-			focusedColumn = len(m.displayColumns) - 1
-		}
-		m.focusedColumn = focusedColumn
-		m.columnCardFocus[m.focusedColumn] = state.FocusedCard
-		m.clampFocusedCard()
-	}
 }
 
 func (m Model) View() string {
@@ -368,7 +284,7 @@ func (m Model) View() string {
 	return boardView
 }
 
-func (m *Model) deleteCards(cardsToDelete []card.Card) {
+func (m *Model) deleteCards(cardsToDelete []models.Card) {
 	if len(cardsToDelete) == 0 {
 		return
 	}
@@ -411,7 +327,7 @@ func (m *Model) deleteCards(cardsToDelete []card.Card) {
 	m.clipboard = keptClipboard
 
 	m.selected = make(map[string]struct{})
-	fs.WriteBoard(m.board)
+	m.client.WriteBoard(m.board)
 	m.clampFocusedCard()
 }
 
@@ -475,7 +391,7 @@ func (m *Model) getFocusedColumnWidth() int {
 	return colWidth
 }
 
-func (m *Model) getCardRenderHeight(c card.Card) int {
+func (m *Model) getCardRenderHeight(c models.Card) int {
 	focusedColWidth := m.getFocusedColumnWidth()
 	if focusedColWidth == 0 {
 		return 2
@@ -592,8 +508,8 @@ func (m *Model) ensureFocusedCardIsVisible() {
 	}
 }
 
-func (m *Model) getSelectedOrFocusedCards() []*card.Card {
-	cardsToMove := make([]*card.Card, 0)
+func (m *Model) getSelectedOrFocusedCards() []*models.Card {
+	cardsToMove := make([]*models.Card, 0)
 	if len(m.selected) > 0 {
 		for i := range m.board.Columns {
 			for j := range m.board.Columns[i].Cards {
@@ -621,15 +537,15 @@ func (m *Model) getSelectedOrFocusedCards() []*card.Card {
 	return cardsToMove
 }
 
-func (m *Model) moveCards(cardsToMove []*card.Card, destCol *column.Column) {
+func (m *Model) moveCards(cardsToMove []*models.Card, destCol *models.Column) {
 	if len(cardsToMove) == 0 {
 		return
 	}
 
-	successfullyMovedCards := make([]card.Card, 0, len(cardsToMove))
+	successfullyMovedCards := make([]models.Card, 0, len(cardsToMove))
 	movedUUIDs := make(map[string]struct{})
 	for _, c := range cardsToMove {
-		err := fs.MoveCard(c, *destCol)
+		err := m.client.MoveCard(c, *destCol)
 		if err == nil {
 			successfullyMovedCards = append(successfullyMovedCards, *c)
 			movedUUIDs[c.UUID] = struct{}{}
@@ -643,7 +559,7 @@ func (m *Model) moveCards(cardsToMove []*card.Card, destCol *column.Column) {
 	// Remove from ALL source columns by creating new slices.
 	for i := range m.board.Columns {
 		col := &m.board.Columns[i]
-		keptCards := make([]card.Card, 0, len(col.Cards))
+		keptCards := make([]models.Card, 0, len(col.Cards))
 		for _, c := range col.Cards {
 			if _, wasMoved := movedUUIDs[c.UUID]; !wasMoved {
 				keptCards = append(keptCards, c)
@@ -652,7 +568,7 @@ func (m *Model) moveCards(cardsToMove []*card.Card, destCol *column.Column) {
 		col.Cards = keptCards
 	}
 
-	keptArchived := make([]card.Card, 0, len(m.board.Archived.Cards))
+	keptArchived := make([]models.Card, 0, len(m.board.Archived.Cards))
 	for _, c := range m.board.Archived.Cards {
 		if _, wasMoved := movedUUIDs[c.UUID]; !wasMoved {
 			keptArchived = append(keptArchived, c)
@@ -665,7 +581,7 @@ func (m *Model) moveCards(cardsToMove []*card.Card, destCol *column.Column) {
 
 func (m *Model) clearSelection() {
 	m.selected = make(map[string]struct{})
-	m.clipboard = []card.Card{}
+	m.clipboard = []models.Card{}
 	m.isCut = false
 	m.visualSelectStart = -1
 	m.mode = normalMode
@@ -720,43 +636,6 @@ func (m *Model) openFZF() tea.Cmd {
 	return m.fzf.Focus()
 }
 
-func (m *Model) popBoard() tea.Cmd {
-	if len(m.boardStack) == 0 {
-		return tea.Quit
-	}
-
-	// Why: Save the state of the board we are leaving.
-	currentState := m.State()
-	if err := fs.SaveState(currentState.FocusedColumn, currentState.FocusedCard, currentState.DoneColumn, currentState.ShowHidden); err != nil {
-		m.statusMessage = fmt.Sprintf("Error saving state: %v", err)
-		return clearStatusCmd(4 * time.Second)
-	}
-
-	lastSession := m.boardStack[len(m.boardStack)-1]
-	m.boardStack = m.boardStack[:len(m.boardStack)-1]
-
-	if err := os.Chdir(lastSession.board.Path); err != nil {
-		// This is a fatal error, as the application state is now desynced
-		// from the filesystem. It's safest to quit.
-		fmt.Fprintf(os.Stderr, "FATAL: could not chdir back to %s: %v\n", lastSession.board.Path, err)
-		return tea.Quit
-	}
-
-	m.board = lastSession.board
-	m.focusedColumn = lastSession.focusedColumn
-	m.columnCardFocus = lastSession.columnCardFocus
-	m.scrollOffset = lastSession.scrollOffset
-	m.doneColumnName = lastSession.doneColumnName
-	m.showHidden = lastSession.showHidden
-
-	m.updateDisplayColumns()
-	m.clampFocusedCard()
-	m.ensureFocusedCardIsVisible()
-
-	m.statusMessage = "Returned to board: " + m.board.Path
-	return clearStatusCmd(2 * time.Second)
-}
-
 func (m *Model) ExecuteCommand(commandStr string) tea.Cmd {
 	parts := strings.SplitN(strings.TrimSpace(commandStr), " ", 2)
 	command := parts[0]
@@ -787,5 +666,5 @@ func (m *Model) ExecuteCommand(commandStr string) tea.Cmd {
 }
 
 func (m *Model) Cleanup() error {
-	return fs.FlushTrash(m.board.Trash)
+	return m.client.FlushTrash(m.board.Trash)
 }

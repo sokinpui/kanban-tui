@@ -4,29 +4,29 @@ import (
 	"bufio"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
-	"kanban/internal/fs"
+	"kanban/internal/client"
+	"kanban/internal/core"
 	"kanban/internal/tui"
 )
 
 var (
-	mainBoardPaths []string
+	host string
 )
 
 var rootCmd = &cobra.Command{
-	Use:   "kanban [path]",
+	Use:   "kanban",
 	Short: "A personal kanban board for your terminal",
 	Long:  `A personal kanban board for your terminal, inspired by vim-kanban.`,
-	Args:  cobra.MaximumNArgs(1),
 	Run:   run,
 }
 
 func init() {
-	rootCmd.Flags().StringSliceVar(&mainBoardPaths, "main", []string{}, "Setup a main board linking to other kanban boards. Can be specified multiple times or as a comma-separated list.")
+	rootCmd.Flags().StringVar(&host, "host", "http://localhost:8080", "Address of the kanban server")
+	rootCmd.AddCommand(serverCmd)
 }
 
 func Execute() {
@@ -37,42 +37,10 @@ func Execute() {
 }
 
 func run(cmd *cobra.Command, args []string) {
-	if len(mainBoardPaths) > 0 {
-		if err := fs.SetupMainBoard(mainBoardPaths); err != nil {
-			fmt.Fprintf(os.Stderr, "error setting up main board: %v\n", err)
-			os.Exit(1)
-		}
-	}
-
-	if len(args) > 0 {
-		targetPath := args[0]
-		info, err := os.Stat(targetPath)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "error accessing path %s: %v\n", targetPath, err)
-			os.Exit(1)
-		}
-
-		var dir string
-		if info.IsDir() {
-			dir = targetPath
-		} else {
-			if filepath.Base(targetPath) == fs.BoardFileName {
-				dir = filepath.Dir(targetPath)
-			} else {
-				fmt.Fprintf(os.Stderr, "error: provided file must be named %s\n", fs.BoardFileName)
-				os.Exit(1)
-			}
-		}
-
-		if err := os.Chdir(dir); err != nil {
-			fmt.Fprintf(os.Stderr, "error changing to directory %s: %v\n", dir, err)
-			os.Exit(1)
-		}
-	}
-
-	board, err := fs.LoadBoard()
+	c := client.New(host)
+	board, err := c.LoadBoard()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "could not load board: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Could not connect to server at %s. Is it running?\nError: %v\n", host, err)
 		os.Exit(1)
 	}
 
@@ -86,11 +54,11 @@ func run(cmd *cobra.Command, args []string) {
 		}
 
 		if strings.ToLower(strings.TrimSpace(response)) == "y" {
-			if err := fs.CreateSampleBoard(&board); err != nil {
+			if err := core.CreateSampleBoard(&board); err != nil {
 				fmt.Fprintf(os.Stderr, "could not create sample board: %v\n", err)
 				os.Exit(1)
 			}
-			board, err = fs.LoadBoard()
+			board, err = core.LoadBoard()
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "could not load board after creating sample: %v\n", err)
 				os.Exit(1)
@@ -102,14 +70,15 @@ func run(cmd *cobra.Command, args []string) {
 		}
 	}
 
-	state, err := fs.LoadState()
+	state, err := core.LoadState()
 	if err != nil {
 		// Non-fatal, we can continue with defaults
 		fmt.Fprintf(os.Stderr, "could not load state: %v\n", err)
 	}
 
-	model := tui.NewModel(board, &state)
+	model := tui.NewModel(c, board, &state)
 	p := tea.NewProgram(&model, tea.WithAltScreen())
+	model.SetProgram(p)
 	finalModel, err := p.Run()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
@@ -123,7 +92,7 @@ func run(cmd *cobra.Command, args []string) {
 		}
 
 		s := m.State()
-		if err := fs.SaveState(s.FocusedColumn, s.FocusedCard, s.DoneColumn, s.ShowHidden); err != nil {
+		if err := core.SaveState(s.FocusedColumn, s.FocusedCard, s.DoneColumn, s.ShowHidden); err != nil {
 			fmt.Fprintf(os.Stderr, "could not save state: %v\n", err)
 			os.Exit(1)
 		}

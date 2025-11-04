@@ -6,7 +6,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"kanban/internal/card"
+	"kanban/internal/models"
 )
 
 func (m *Model) updateCommandMode(msg tea.Msg) tea.Cmd {
@@ -20,7 +20,7 @@ func (m *Model) updateCommandMode(msg tea.Msg) tea.Cmd {
 			m.textInput.Blur()
 			m.createCardMode = "prepend"
 			m.selected = make(map[string]struct{})
-			m.clipboard = []card.Card{}
+			m.clipboard = []models.Card{}
 			m.isCut = false
 			m.completionMatches = nil
 			m.completionIndex = -1

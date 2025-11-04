@@ -1,5 +1,4 @@
-// internal/fs/fs.go
-package fs
+package core
 
 import (
 	"bufio"
@@ -14,16 +13,14 @@ import (
 
 	"github.com/google/uuid"
 	"gopkg.in/yaml.v3"
-	"kanban/internal/board"
-	"kanban/internal/card"
-	"kanban/internal/column"
+	"kanban/internal/models"
 )
 
 const (
-	BoardFileName  = "kanban.md"
-	DataDirName    = ".kanban"
-	StateFileName  = "state.json"
-	frontMatterSep = "---\n"
+	BoardFileName     = "kanban.md"
+	DataDirName       = ".kanban"
+	StateFileName     = "state.json"
+	frontMatterSep    = "---\n"
 	ArchiveColumnName = "Archived"
 )
 
@@ -36,24 +33,24 @@ type AppState struct {
 
 var cardLinkRegex = regexp.MustCompile(`\s*-\s*\[(.*?)\]\((.*?)\)`)
 
-func LoadBoard() (board.Board, error) {
+func LoadBoard() (models.Board, error) {
 	wd, err := os.Getwd()
 	if err != nil {
-		return board.Board{}, err
+		return models.Board{}, err
 	}
-	b := board.New(wd, []column.Column{})
+	b := models.New(wd, []models.Column{})
 
 	f, err := os.Open(BoardFileName)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return b, nil
 		}
-		return board.Board{}, err
+		return models.Board{}, err
 	}
 	defer f.Close()
 
-	allCols := make([]column.Column, 0)
-	var currentColumn *column.Column
+	allCols := make([]models.Column, 0)
+	var currentColumn *models.Column
 
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
@@ -63,10 +60,10 @@ func LoadBoard() (board.Board, error) {
 				allCols = append(allCols, *currentColumn)
 			}
 			title := strings.TrimSpace(strings.TrimPrefix(line, "# "))
-			currentColumn = &column.Column{
+			currentColumn = &models.Column{
 				Title: title,
 				Path:  filepath.Join(DataDirName, title),
-				Cards: []card.Card{},
+				Cards: []models.Card{},
 			}
 		} else if currentColumn != nil && cardLinkRegex.MatchString(line) {
 			matches := cardLinkRegex.FindStringSubmatch(line)
@@ -85,11 +82,11 @@ func LoadBoard() (board.Board, error) {
 	}
 
 	if err := scanner.Err(); err != nil {
-		return board.Board{}, err
+		return models.Board{}, err
 	}
 
-	displayCols := make([]column.Column, 0)
-	var archivedCol *column.Column
+	displayCols := make([]models.Column, 0)
+	var archivedCol *models.Column
 
 	for i := range allCols {
 		if allCols[i].Title == ArchiveColumnName {
@@ -103,16 +100,16 @@ func LoadBoard() (board.Board, error) {
 	if archivedCol != nil {
 		b.Archived = *archivedCol
 	} else {
-		b.Archived = column.New(ArchiveColumnName, filepath.Join(DataDirName, ArchiveColumnName))
+		b.Archived = models.NewColumn(ArchiveColumnName, filepath.Join(DataDirName, ArchiveColumnName))
 	}
 
 	return b, nil
 }
 
-func WriteBoard(b board.Board) error {
+func WriteBoard(b models.Board) error {
 	var builder strings.Builder
 
-	allColumns := make([]column.Column, len(b.Columns))
+	allColumns := make([]models.Column, len(b.Columns))
 	copy(allColumns, b.Columns)
 	if len(b.Archived.Cards) > 0 {
 		allColumns = append(allColumns, b.Archived)
@@ -169,7 +166,7 @@ func SetupMainBoard(kanbanFilePaths []string) error {
 		madeChanges = true
 	}
 
-	var bufferCol *column.Column
+	var bufferCol *models.Column
 	for i := range board.Columns {
 		if board.Columns[i].Title == "buffer" {
 			bufferCol = &board.Columns[i]
@@ -242,9 +239,9 @@ func SetupMainBoard(kanbanFilePaths []string) error {
 	return nil
 }
 
-func CreateSampleBoard(b *board.Board) error {
+func CreateSampleBoard(b *models.Board) error {
 	sampleCols := []string{"Notes", "Planned", "WIP", "Done"}
-	var columns []column.Column
+	var columns []models.Column
 
 	if err := os.Mkdir(DataDirName, 0755); err != nil && !os.IsExist(err) {
 		return err
@@ -255,32 +252,32 @@ func CreateSampleBoard(b *board.Board) error {
 		if err := os.Mkdir(colPath, 0755); err != nil && !os.IsExist(err) {
 			return err
 		}
-		col := column.New(colName, colPath)
+		col := models.NewColumn(colName, colPath)
 		columns = append(columns, col)
 	}
 	b.Columns = columns
 	return WriteBoard(*b)
 }
 
-func LoadCard(path string) (card.Card, error) {
+func LoadCard(path string) (models.Card, error) {
 	fileInfo, err := os.Stat(path)
 	if err != nil {
-		return card.Card{}, err
+		return models.Card{}, err
 	}
 
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return card.Card{}, err
+		return models.Card{}, err
 	}
 
 	parts := strings.SplitN(string(data), frontMatterSep, 3)
 	if len(parts) < 3 {
-		return card.Card{}, fmt.Errorf("invalid markdown format: missing front matter")
+		return models.Card{}, fmt.Errorf("invalid markdown format: missing front matter")
 	}
 
-	var c card.Card
+	var c models.Card
 	if err := yaml.Unmarshal([]byte(parts[1]), &c); err != nil {
-		return card.Card{}, err
+		return models.Card{}, err
 	}
 
 	c.Content = strings.TrimSpace(parts[2])
@@ -291,11 +288,11 @@ func LoadCard(path string) (card.Card, error) {
 	return c, nil
 }
 
-func CreateCard(col column.Column, title string) (card.Card, error) {
+func CreateCard(col models.Column, title string) (models.Card, error) {
 	id := uuid.New()
 	now := time.Now()
 
-	c := card.Card{
+	c := models.Card{
 		UUID:       id.String(),
 		Title:      title,
 		CreatedAt:  now,
@@ -304,7 +301,7 @@ func CreateCard(col column.Column, title string) (card.Card, error) {
 	}
 
 	if err := WriteCard(c); err != nil {
-		return card.Card{}, err
+		return models.Card{}, err
 	}
 
 	fileInfo, err := os.Stat(c.Path)
@@ -317,7 +314,7 @@ func CreateCard(col column.Column, title string) (card.Card, error) {
 	return c, nil
 }
 
-func WriteCard(c card.Card) error {
+func WriteCard(c models.Card) error {
 	c.ModifiedAt = time.Now()
 
 	frontMatter, err := yaml.Marshal(&c)
@@ -330,7 +327,7 @@ func WriteCard(c card.Card) error {
 	return os.WriteFile(c.Path, []byte(content), 0644)
 }
 
-func MoveCard(c *card.Card, destCol column.Column) error {
+func MoveCard(c *models.Card, destCol models.Column) error {
 	newPath := filepath.Join(destCol.Path, filepath.Base(c.Path))
 
 	if c.Path == newPath {
@@ -355,20 +352,20 @@ func MoveCard(c *card.Card, destCol column.Column) error {
 	return WriteCard(*c)
 }
 
-func CopyCard(c card.Card, destCol column.Column) (card.Card, error) {
+func CopyCard(c models.Card, destCol models.Column) (models.Card, error) {
 	newCard, err := CreateCard(destCol, c.Title)
 	if err != nil {
-		return card.Card{}, err
+		return models.Card{}, err
 	}
 	newCard.Content = c.Content
 	newCard.Link = c.Link
 	if err := WriteCard(newCard); err != nil {
-		return card.Card{}, err
+		return models.Card{}, err
 	}
 	return newCard, nil
 }
 
-func TrashCard(c card.Card) error {
+func TrashCard(c models.Card) error {
 	_, err := exec.LookPath("trash")
 	if err != nil {
 		return fmt.Errorf("'trash' command not found, please install trash-cli")
@@ -377,15 +374,15 @@ func TrashCard(c card.Card) error {
 	return cmd.Run()
 }
 
-func CreateColumn(name string) (column.Column, error) {
+func CreateColumn(name string) (models.Column, error) {
 	colPath := filepath.Join(DataDirName, name)
 	if err := os.Mkdir(colPath, 0755); err != nil {
-		return column.Column{}, err
+		return models.Column{}, err
 	}
-	return column.New(name, colPath), nil
+	return models.NewColumn(name, colPath), nil
 }
 
-func DeleteColumn(col column.Column) error {
+func DeleteColumn(col models.Column) error {
 	for _, crd := range col.Cards {
 		if err := TrashCard(crd); err != nil {
 			// Log or handle error, but try to continue
@@ -401,7 +398,7 @@ func DeleteColumn(col column.Column) error {
 	return cmd.Run()
 }
 
-func RenameColumn(col *column.Column, newName string) error {
+func RenameColumn(col *models.Column, newName string) error {
 	if col.Title == newName {
 		return nil // No change
 	}
@@ -460,7 +457,7 @@ func LoadState() (AppState, error) {
 	return state, nil
 }
 
-func FlushTrash(trash []card.Card) error {
+func FlushTrash(trash []models.Card) error {
 	var firstErr error
 	for _, c := range trash {
 		err := TrashCard(c)
@@ -477,11 +474,11 @@ func FlushTrash(trash []card.Card) error {
 // SynchronizeBoard ensures that the filesystem state matches the board state.
 // It moves card files to their correct locations as defined in the board struct.
 // This is useful after an undo/redo operation to ensure consistency.
-func SynchronizeBoard(b board.Board) error {
+func SynchronizeBoard(b models.Board) error {
 	// Create a map of all card UUIDs to their correct paths from the board state.
 	expectedPaths := make(map[string]string)
 
-	allCols := make([]column.Column, 0, len(b.Columns)+1)
+	allCols := make([]models.Column, 0, len(b.Columns)+1)
 	allCols = append(allCols, b.Columns...)
 	if b.Archived.CardCount() > 0 {
 		allCols = append(allCols, b.Archived)
