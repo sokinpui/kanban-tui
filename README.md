@@ -40,6 +40,54 @@ Install the application using `go`:
 go install github.com/sokinpui/kanban-tui/cmd/kanban@latest
 ```
 
+Ephemeral build and run via nix flakes:
+
+```sh
+nix run github:sokinpui/kanban-tui
+```
+
+Install the application via nix flakes:
+
+1. Add to your flake inputs
+
+```nix
+{
+  inputs = {
+    kanban-tui = {
+      url = "github:sokinput/kanban-tui";
+    };
+  };
+
+  outputs =
+    inputs@{
+      self,
+      nixpkgs,
+      ...
+    }:
+    {
+      # ...flake outputs
+    };
+}
+```
+
+2. Reference the flake in your nix configuration:
+
+configuration.nix
+```nix
+  environment.systemPackages = with pkgs; [
+    inputs.kanban-tui.packages."${pkgs.stdenv.hostPlatform.system}".default
+  ]
+```
+
+or
+
+home.nix
+```nix
+  home.packages = with pkgs; [
+    inputs.kanban-tui.packages."${pkgs.stdenv.hostPlatform.system}".default
+  ]
+```
+
 ## Usage
 
 Run `kanban` in any directory.
